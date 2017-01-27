@@ -84,10 +84,84 @@ func Get(key string) (string, error) {
 	return string(buffer), nil
 }
 
+func Gets() {
+	// TODO
+}
+
 //// Storage commands
 
 // Set key
 func Set(key string, value string) error {
 	// TODO
 	return nil
+}
+
+func Add() {
+	// TODO
+}
+
+func Replace() {
+	// TODO
+}
+
+func Append() {
+	// TODO
+}
+
+func Cas() {
+	// TODO
+}
+
+func Prepend() {
+	// TODO
+}
+
+//// Deletion
+
+func Delete() {
+	// TODO
+}
+
+//// Increment/Decrement
+
+func Increment() {
+	// TODO
+}
+
+func Decrement() {
+	// TODO
+}
+
+//// Touch
+
+func Touch() {
+	// TODO
+}
+
+//// Slabs Reassign (Not Impl)
+//// Slabs Automove (Not Impl)
+//// LRU_Crawler (Not Impl)
+//// Watchers (Not Impl)
+
+//// Statistics
+
+func Stats() {
+	// TODO
+}
+
+//// General-purpose statistics (Not Impl)
+// STAT <name> <value>\r\n
+
+//// Other commands
+
+func FlushAll() {
+	// TODO
+}
+
+func Version() {
+	// TODO
+}
+
+func Quit() {
+	// TODO
 }
