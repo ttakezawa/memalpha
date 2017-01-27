@@ -101,7 +101,53 @@ func Gets() {
 
 // Set key
 func Set(key string, value string) error {
-	// TODO
+	noreply := false
+
+	conn, err := getConnection()
+	if err != nil {
+		return err
+	}
+
+	sendData := []byte(value)
+
+	flags := 0
+	exptime := 0
+
+	option := ""
+	if noreply {
+		option = "noreply"
+	}
+
+	// Send command: set <key> <flags> <exptime> <bytes> [noreply]\r\n
+	_, err = conn.Write([]byte(fmt.Sprintf("set %s %d %d %d %s\r\n", key, flags, exptime, len(sendData), option)))
+	if err != nil {
+		return err
+	}
+
+	// Send data block: <data block>\r\n
+	_, err = conn.Write(sendData)
+	if err != nil {
+		return err
+	}
+	_, err = conn.Write([]byte("\r\n"))
+	if err != nil {
+		return err
+	}
+
+	// Receive reply
+	if !noreply {
+		reader := bufio.NewReader(conn)
+		reply, isPrefix, err := reader.ReadLine()
+		if err != nil {
+			return err
+		}
+		if isPrefix {
+			return errors.New("buffer is not enough")
+		}
+
+		fmt.Printf("Reply: %+v\n", string(reply)) // output for debug
+	}
+
 	return nil
 }
 
