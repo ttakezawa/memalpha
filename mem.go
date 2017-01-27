@@ -14,17 +14,26 @@ import (
 // - https://github.com/memcached/memcached/blob/master/doc/protocol.txt
 // - https://github.com/youtube/vitess/blob/master/go/memcache/memcache.go
 
-//// Retrieval commands
-
-func Get(key string) (string, error) {
+func getConnection() (*net.TCPConn, error) {
 	service := "127.0.0.1:11211"
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
+}
+
+//// Retrieval commands
+
+func Get(key string) (string, error) {
+	conn, err := getConnection()
 	if err != nil {
 		return "", err
 	}
