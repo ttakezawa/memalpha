@@ -14,36 +14,61 @@ import (
 // - https://github.com/memcached/memcached/blob/master/doc/protocol.txt
 // - https://github.com/youtube/vitess/blob/master/go/memcache/memcache.go
 
-func getConnection() (*net.TCPConn, error) {
-	service := "127.0.0.1:11211"
+// Client is a memcached client
+type Client struct {
+	Addr string
+	Conn net.Conn
+}
 
-	tcpAddr, err := net.ResolveTCPAddr("tcp4", service)
+// NewClient returns a new Client.
+func NewClient(addr string) *Client {
+	client := &Client{Addr: addr}
+	return client
+
+}
+
+func (c *Client) connect() error {
+	tcpAddr, err := net.ResolveTCPAddr("tcp4", c.Addr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return conn, nil
+	c.Conn = conn
+	return nil
+}
+
+func (c *Client) isConnected() bool {
+	return c.Conn != nil
+}
+
+func (c *Client) ensureConnect() error {
+	if c.isConnected() {
+		return nil
+	}
+
+	return c.connect()
 }
 
 //// Retrieval commands
 
-func Get(key string) (string, error) {
-	conn, err := getConnection()
+// Get a value
+func (c *Client) Get(key string) (string, error) {
+	err := c.ensureConnect()
 	if err != nil {
 		return "", err
 	}
 
-	_, err = conn.Write([]byte(fmt.Sprintf("get %s \r\n", key)))
+	_, err = c.Conn.Write([]byte(fmt.Sprintf("get %s \r\n", key)))
 	if err != nil {
 		return "", err
 	}
 
-	reader := bufio.NewReader(conn)
+	reader := bufio.NewReader(c.Conn)
 	header, isPrefix, err := reader.ReadLine()
 	if err != nil {
 		return "", err
@@ -100,10 +125,10 @@ func Gets() {
 //// Storage commands
 
 // Set key
-func Set(key string, value string) error {
+func (c *Client) Set(key string, value string) error {
 	noreply := false
 
-	conn, err := getConnection()
+	err := c.ensureConnect()
 	if err != nil {
 		return err
 	}
@@ -119,24 +144,24 @@ func Set(key string, value string) error {
 	}
 
 	// Send command: set <key> <flags> <exptime> <bytes> [noreply]\r\n
-	_, err = conn.Write([]byte(fmt.Sprintf("set %s %d %d %d %s\r\n", key, flags, exptime, len(sendData), option)))
+	_, err = c.Conn.Write([]byte(fmt.Sprintf("set %s %d %d %d %s\r\n", key, flags, exptime, len(sendData), option)))
 	if err != nil {
 		return err
 	}
 
 	// Send data block: <data block>\r\n
-	_, err = conn.Write(sendData)
+	_, err = c.Conn.Write(sendData)
 	if err != nil {
 		return err
 	}
-	_, err = conn.Write([]byte("\r\n"))
+	_, err = c.Conn.Write([]byte("\r\n"))
 	if err != nil {
 		return err
 	}
 
 	// Receive reply
 	if !noreply {
-		reader := bufio.NewReader(conn)
+		reader := bufio.NewReader(c.Conn)
 		reply, isPrefix, err := reader.ReadLine()
 		if err != nil {
 			return err

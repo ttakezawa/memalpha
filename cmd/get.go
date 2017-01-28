@@ -41,7 +41,8 @@ to quickly create a Cobra application.`,
 		// TODO: Work your own magic here
 		fmt.Printf("get called %#v\n", args)
 
-		r, err := memalpha.Get(args[0])
+		client := memalpha.NewClient("127.0.0.1:11211")
+		r, err := client.Get(args[0])
 		fmt.Printf("err: %+v\n", err)
 		fmt.Printf("result: %+v\n", r)
 	},

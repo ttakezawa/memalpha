@@ -40,7 +40,8 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("set called")
 
-		err := memalpha.Set(args[0], args[1])
+		client := memalpha.NewClient("127.0.0.1:11211")
+		err := client.Set(args[0], args[1])
 		fmt.Printf("err: %+v\n", err)
 	},
 }
