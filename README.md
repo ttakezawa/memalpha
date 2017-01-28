@@ -1,6 +1,6 @@
 # memalpha
 
-[![license](https://img.shields.io/github/license/ttakezawa/memalpha.svg?style=flat-square)]()
+[![license](https://img.shields.io/github/license/ttakezawa/memalpha.svg?style=flat-square)](LICENSE)
 
 TODO: Write a project description
 
