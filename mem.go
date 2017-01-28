@@ -125,13 +125,18 @@ func Gets() {
 //// Storage commands
 
 func (c *Client) sendCommand(command string, key string, value []byte, flags uint32, exptime int, noreply bool) error {
+	err := c.ensureConnect()
+	if err != nil {
+		return err
+	}
+
 	option := ""
 	if noreply {
 		option = "noreply"
 	}
 
 	// Send command: <command> <key> <flags> <exptime> <bytes> [noreply]\r\n
-	_, err := c.Conn.Write([]byte(fmt.Sprintf("set %s %d %d %d %s\r\n", key, flags, exptime, len(value), option)))
+	_, err = c.Conn.Write([]byte(fmt.Sprintf("%s %s %d %d %d %s\r\n", command, key, flags, exptime, len(value), option)))
 	if err != nil {
 		return err
 	}
@@ -165,21 +170,22 @@ func (c *Client) sendCommand(command string, key string, value []byte, flags uin
 
 // Set key
 func (c *Client) Set(key string, value string) error {
-	err := c.ensureConnect()
-	if err != nil {
-		return err
-	}
-
-	var flags uint32 = 0
+	var flags uint32
 	exptime := 0
 	noreply := false
 
-	err = c.sendCommand("set", key, []byte(value), flags, exptime, noreply)
+	err := c.sendCommand("set", key, []byte(value), flags, exptime, noreply)
 	return err
 }
 
-func Add() {
-	// TODO
+// Add key
+func (c *Client) Add(key string, value string) error {
+	var flags uint32
+	exptime := 0
+	noreply := false
+
+	err := c.sendCommand("add", key, []byte(value), flags, exptime, noreply)
+	return err
 }
 
 func Replace() {
