@@ -188,19 +188,37 @@ func (c *Client) Add(key string, value string) error {
 	return err
 }
 
-func Replace() {
-	// TODO
+// Replace key
+func (c *Client) Replace(key string, value string) error {
+	var flags uint32
+	exptime := 0
+	noreply := false
+
+	err := c.sendCommand("replace", key, []byte(value), flags, exptime, noreply)
+	return err
 }
 
-func Append() {
-	// TODO
+// Append key
+func (c *Client) Append(key string, value string) error {
+	var flags uint32
+	exptime := 0
+	noreply := false
+
+	err := c.sendCommand("append", key, []byte(value), flags, exptime, noreply)
+	return err
+}
+
+// Prepend key
+func (c *Client) Prepend(key string, value string) error {
+	var flags uint32
+	exptime := 0
+	noreply := false
+
+	err := c.sendCommand("prepend", key, []byte(value), flags, exptime, noreply)
+	return err
 }
 
 func Cas() {
-	// TODO
-}
-
-func Prepend() {
 	// TODO
 }
 
