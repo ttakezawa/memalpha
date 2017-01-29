@@ -56,14 +56,13 @@ func (c *Client) ensureConnect() error {
 
 //// Retrieval commands
 
-// Get a value
-func (c *Client) Get(key string) (string, error) {
+func (c *Client) sendRetrieveCommand(cmd string, key string) (string, error) {
 	err := c.ensureConnect()
 	if err != nil {
 		return "", err
 	}
 
-	_, err = c.Conn.Write([]byte(fmt.Sprintf("get %s \r\n", key)))
+	_, err = c.Conn.Write([]byte(fmt.Sprintf("%s %s \r\n", cmd, key)))
 	if err != nil {
 		return "", err
 	}
@@ -118,8 +117,14 @@ func (c *Client) Get(key string) (string, error) {
 	return string(buffer), nil
 }
 
-func Gets() {
-	// TODO
+// Get takes one or more keys and returns all found items.
+func (c *Client) Get(key string) (string, error) {
+	return c.sendRetrieveCommand("get", key)
+}
+
+// Gets is an alternative get command for using with CAS.
+func (c *Client) Gets(key string) (string, error) {
+	return c.sendRetrieveCommand("gets", key)
 }
 
 //// Storage commands
