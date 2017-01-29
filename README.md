@@ -18,7 +18,14 @@ TODO: Write usage
 - SASL
 - checkpoint
 - helper utilities
-  - Get or Set
+  - GetOrSet
+  - hash key
+  - escape key
+  - compress value
+  - counter
+  - avoid thundering herd
+    - eary expire
+    - control concurrency with semaphore or mutex
 
 ## License
 
