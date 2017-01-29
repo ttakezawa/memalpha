@@ -151,20 +151,28 @@ func (c *Client) sendCommand(command string, key string, value []byte, flags uin
 		return err
 	}
 
-	// Receive reply
 	if !noreply {
-		reader := bufio.NewReader(c.Conn)
-		reply, isPrefix, err := reader.ReadLine()
+		// Receive reply
+		err = c.receiveReply()
 		if err != nil {
 			return err
 		}
-		if isPrefix {
-			return errors.New("buffer is not enough")
-		}
-
-		fmt.Printf("Reply: %+v\n", string(reply)) // output for debug
 	}
 
+	return nil
+}
+
+func (c *Client) receiveReply() error {
+	reader := bufio.NewReader(c.Conn)
+	reply, isPrefix, err := reader.ReadLine()
+	if err != nil {
+		return err
+	}
+	if isPrefix {
+		return errors.New("buffer is not enough")
+	}
+
+	fmt.Printf("Reply: %+v\n", string(reply)) // output for debug
 	return nil
 }
 
