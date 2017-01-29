@@ -16,7 +16,11 @@ import (
 // - https://github.com/youtube/vitess/blob/master/go/memcache/memcache.go
 
 var (
+	// ErrCacheMiss means that a Get failed because the item wasn't present.
 	ErrCacheMiss = errors.New("memcache: cache miss")
+
+	// ErrNotFound indicates that the item wasn't present.
+	ErrNotFound = errors.New("memcache: item not found")
 
 	// ErrCasConflict indicates that the item you are trying to store with
 	// a "cas" command has been modified since you last fetched it.
@@ -25,10 +29,6 @@ var (
 	// ErrNotStored normally means that the condition for an "add" or a
 	// "replace" command wasn't met.
 	ErrNotStored = errors.New("memcache: item not stored")
-
-	// ErrNotFound indicates that the item you are trying to store with a "cas"
-	// command did not exist.
-	ErrNotFound = errors.New("memcache: item not found")
 )
 
 var (
@@ -36,6 +36,7 @@ var (
 	replyNotStored = []byte("NOT_STORED")
 	replyExists    = []byte("EXISTS")
 	replyNotFound  = []byte("NOT_FOUND")
+	replyDeleted   = []byte("DELETED")
 )
 
 var (
@@ -195,39 +196,39 @@ func (c *Client) sendStorageCommand(command string, key string, value []byte, fl
 
 	if !noreply {
 		// Receive reply
-		err = c.receiveReply()
+		reply, err := c.receiveReply()
 		if err != nil {
 			return err
 		}
+		switch {
+		case bytes.Equal(reply, replyStored):
+			return nil
+		case bytes.Equal(reply, replyExists):
+			return ErrCasConflict
+		case bytes.Equal(reply, replyNotStored):
+			return ErrNotStored
+		case bytes.Equal(reply, replyNotFound):
+			return ErrNotFound
+		}
+		return errors.New(string(reply))
 	}
 
 	return nil
 }
 
-func (c *Client) receiveReply() error {
+func (c *Client) receiveReply() ([]byte, error) {
 	reader := bufio.NewReader(c.Conn)
 	reply, isPrefix, err := reader.ReadLine()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if isPrefix {
-		return errors.New("buffer is not enough")
+		return nil, errors.New("buffer is not enough")
 	}
 
 	fmt.Printf("Reply: %+v\n", string(reply)) // output for debug
 
-	switch {
-	case bytes.Equal(reply, replyStored):
-		return nil
-	case bytes.Equal(reply, replyExists):
-		return ErrCasConflict
-	case bytes.Equal(reply, replyNotStored):
-		return ErrNotStored
-	case bytes.Equal(reply, replyNotFound):
-		return ErrNotFound
-	}
-
-	return errors.New(string(reply))
+	return reply, nil
 }
 
 // Set key
@@ -291,8 +292,40 @@ func (c *Client) CompareAndSwap(key string, value string, casid uint64) error {
 
 //// Deletion
 
-func Delete() {
-	// TODO
+// Delete deletes the item with the provided key
+func (c *Client) Delete(key string, noreply bool) error {
+	err := c.ensureConnect()
+	if err != nil {
+		return err
+	}
+
+	option := ""
+	if noreply {
+		option = "noreply"
+	}
+
+	// delete <key> [noreply]\r\n
+	_, err = c.Conn.Write([]byte(fmt.Sprintf("delete %s %s\r\n", key, option)))
+	if err != nil {
+		return err
+	}
+
+	if !noreply {
+		// Receive reply
+		reply, err := c.receiveReply()
+		if err != nil {
+			return err
+		}
+		switch {
+		case bytes.Equal(reply, replyDeleted):
+			return nil
+		case bytes.Equal(reply, replyNotFound):
+			return ErrNotFound
+		}
+		return errors.New(string(reply))
+	}
+
+	return nil
 }
 
 //// Increment/Decrement
