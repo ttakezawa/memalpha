@@ -2,6 +2,7 @@ package memalpha
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,27 @@ import (
 // See
 // - https://github.com/memcached/memcached/blob/master/doc/protocol.txt
 // - https://github.com/youtube/vitess/blob/master/go/memcache/memcache.go
+
+var (
+	// ErrCasConflict indicates that the item you are trying to store with
+	// a "cas" command has been modified since you last fetched it.
+	ErrCasConflict = errors.New("memcache: compare-and-swap conflict")
+
+	// ErrNotStored normally means that the condition for an "add" or a
+	// "replace" command wasn't met.
+	ErrNotStored = errors.New("memcache: item not stored")
+
+	// ErrNotFound indicates that the item you are trying to store with a "cas"
+	// command did not exist.
+	ErrNotFound = errors.New("memcache: item not found")
+)
+
+var (
+	replyStored    = []byte("STORED")
+	replyNotStored = []byte("NOT_STORED")
+	replyExists    = []byte("EXISTS")
+	replyNotFound  = []byte("NOT_FOUND")
+)
 
 // Client is a memcached client
 type Client struct {
@@ -140,8 +162,13 @@ func (c *Client) sendCommand(command string, key string, value []byte, flags uin
 		option = "noreply"
 	}
 
-	// Send command: <command> <key> <flags> <exptime> <bytes> [noreply]\r\n
-	_, err = c.Conn.Write([]byte(fmt.Sprintf("%s %s %d %d %d %s\r\n", command, key, flags, exptime, len(value), option)))
+	if command == "cas" {
+		// Send command: cas       <key> <flags> <exptime> <bytes> <cas unique> [noreply]\r\n
+		_, err = c.Conn.Write([]byte(fmt.Sprintf("%s %s %d %d %d %d %s\r\n", command, key, flags, exptime, len(value), casid, option)))
+	} else {
+		// Send command: <command> <key> <flags> <exptime> <bytes> [noreply]\r\n
+		_, err = c.Conn.Write([]byte(fmt.Sprintf("%s %s %d %d %d %s\r\n", command, key, flags, exptime, len(value), option)))
+	}
 	if err != nil {
 		return err
 	}
@@ -178,7 +205,19 @@ func (c *Client) receiveReply() error {
 	}
 
 	fmt.Printf("Reply: %+v\n", string(reply)) // output for debug
-	return nil
+
+	switch {
+	case bytes.Equal(reply, replyStored):
+		return nil
+	case bytes.Equal(reply, replyExists):
+		return ErrCasConflict
+	case bytes.Equal(reply, replyNotStored):
+		return ErrNotStored
+	case bytes.Equal(reply, replyNotFound):
+		return ErrNotFound
+	}
+
+	return errors.New(string(reply))
 }
 
 // Set key
@@ -231,8 +270,13 @@ func (c *Client) Prepend(key string, value string) error {
 	return err
 }
 
-func Cas() {
-	// TODO
+func (c *Client) CompareAndSwap(key string, value string, casid uint64) error {
+	var flags uint32
+	exptime := 0
+	noreply := false
+
+	err := c.sendCommand("cas", key, []byte(value), flags, exptime, casid, noreply)
+	return err
 }
 
 //// Deletion
