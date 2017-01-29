@@ -39,11 +39,14 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// TODO: Work your own magic here
-		fmt.Printf("get called %#v\n", args)
+		fmt.Printf("get called")
 
 		client := memalpha.NewClient("127.0.0.1:11211")
 		r, err := client.Get(args[0])
-		fmt.Printf("err: %+v\n", err)
+		if err != nil {
+			fmt.Printf("err: %+v\n", err)
+			return
+		}
 		fmt.Printf("result: %+v\n", r)
 	},
 }

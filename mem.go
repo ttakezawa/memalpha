@@ -16,6 +16,8 @@ import (
 // - https://github.com/youtube/vitess/blob/master/go/memcache/memcache.go
 
 var (
+	ErrCacheMiss = errors.New("memcache: cache miss")
+
 	// ErrCasConflict indicates that the item you are trying to store with
 	// a "cas" command has been modified since you last fetched it.
 	ErrCasConflict = errors.New("memcache: compare-and-swap conflict")
@@ -34,6 +36,10 @@ var (
 	replyNotStored = []byte("NOT_STORED")
 	replyExists    = []byte("EXISTS")
 	replyNotFound  = []byte("NOT_FOUND")
+)
+
+var (
+	responseEnd = []byte("END")
 )
 
 // Client is a memcached client
@@ -96,6 +102,10 @@ func (c *Client) sendRetrieveCommand(cmd string, key string) (string, error) {
 	}
 	if isPrefix {
 		return "", errors.New("buffer is not enough")
+	}
+
+	if bytes.Equal(header, responseEnd) {
+		return "", ErrCacheMiss
 	}
 
 	// VALUE <key> <flags> <bytes> [<cas unique>]\r\n
