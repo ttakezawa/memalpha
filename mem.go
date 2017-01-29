@@ -161,7 +161,7 @@ func (c *Client) Gets(key string) (string, error) {
 
 //// Storage commands
 
-func (c *Client) sendCommand(command string, key string, value []byte, flags uint32, exptime int, casid uint64, noreply bool) error {
+func (c *Client) sendStorageCommand(command string, key string, value []byte, flags uint32, exptime int, casid uint64, noreply bool) error {
 	err := c.ensureConnect()
 	if err != nil {
 		return err
@@ -236,7 +236,7 @@ func (c *Client) Set(key string, value string) error {
 	exptime := 0
 	noreply := false
 
-	err := c.sendCommand("set", key, []byte(value), flags, exptime, 0, noreply)
+	err := c.sendStorageCommand("set", key, []byte(value), flags, exptime, 0, noreply)
 	return err
 }
 
@@ -246,7 +246,7 @@ func (c *Client) Add(key string, value string) error {
 	exptime := 0
 	noreply := false
 
-	err := c.sendCommand("add", key, []byte(value), flags, exptime, 0, noreply)
+	err := c.sendStorageCommand("add", key, []byte(value), flags, exptime, 0, noreply)
 	return err
 }
 
@@ -256,7 +256,7 @@ func (c *Client) Replace(key string, value string) error {
 	exptime := 0
 	noreply := false
 
-	err := c.sendCommand("replace", key, []byte(value), flags, exptime, 0, noreply)
+	err := c.sendStorageCommand("replace", key, []byte(value), flags, exptime, 0, noreply)
 	return err
 }
 
@@ -266,7 +266,7 @@ func (c *Client) Append(key string, value string) error {
 	exptime := 0
 	noreply := false
 
-	err := c.sendCommand("append", key, []byte(value), flags, exptime, 0, noreply)
+	err := c.sendStorageCommand("append", key, []byte(value), flags, exptime, 0, noreply)
 	return err
 }
 
@@ -276,7 +276,7 @@ func (c *Client) Prepend(key string, value string) error {
 	exptime := 0
 	noreply := false
 
-	err := c.sendCommand("prepend", key, []byte(value), flags, exptime, 0, noreply)
+	err := c.sendStorageCommand("prepend", key, []byte(value), flags, exptime, 0, noreply)
 	return err
 }
 
@@ -285,7 +285,7 @@ func (c *Client) CompareAndSwap(key string, value string, casid uint64) error {
 	exptime := 0
 	noreply := false
 
-	err := c.sendCommand("cas", key, []byte(value), flags, exptime, casid, noreply)
+	err := c.sendStorageCommand("cas", key, []byte(value), flags, exptime, casid, noreply)
 	return err
 }
 
