@@ -42,7 +42,9 @@ to quickly create a Cobra application.`,
 
 		client := memalpha.NewClient("127.0.0.1:11211")
 		err := client.Set(args[0], args[1])
-		fmt.Printf("err: %+v\n", err)
+		if err != nil {
+			fmt.Printf("err: %+v\n", err)
+		}
 	},
 }
 
