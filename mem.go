@@ -37,6 +37,7 @@ var (
 	replyExists    = []byte("EXISTS")
 	replyNotFound  = []byte("NOT_FOUND")
 	replyDeleted   = []byte("DELETED")
+	replyTouched   = []byte("TOUCHED")
 )
 
 var (
@@ -387,8 +388,41 @@ func (c *Client) executeIncrDecrCommand(command string, key string, value uint64
 
 //// Touch
 
-func Touch() {
-	// TODO
+// Touch is used to update the expiration time of an existing item without fetching it.
+func (c *Client) Touch(key string, exptime int32, noreply bool) error {
+	err := c.ensureConnect()
+	if err != nil {
+		return err
+	}
+
+	option := ""
+	if noreply {
+		option = "noreply"
+	}
+
+	// touch <key> <exptime> [noreply]\r\n
+	_, err = c.Conn.Write([]byte(fmt.Sprintf("touch %s %d %s\r\n", key, exptime, option)))
+	if err != nil {
+		return err
+	}
+
+	if !noreply {
+		// Recieve reply
+		reply, err1 := c.receiveReply()
+		if err1 != nil {
+			return err1
+		}
+		switch {
+		case bytes.Equal(reply, replyTouched):
+			return nil
+		case bytes.Equal(reply, replyNotFound):
+			return ErrNotFound
+			// TODO: case ERROR, CLIENT_ERROR, SERVER_ERROR
+		}
+		return errors.New(string(reply))
+	}
+
+	return nil
 }
 
 //// Slabs Reassign (Not Impl)
