@@ -330,8 +330,45 @@ func (c *Client) Delete(key string, noreply bool) error {
 
 //// Increment/Decrement
 
-func Increment() {
-	// TODO
+// Increment key by value. value is the amount by which the client wants to increase
+// the item. It is a decimal representation of a 64-bit unsigned integer. The return
+// value is the new value. If noreply is true, the return value is always 0.
+func (c *Client) Increment(key string, value uint64, noreply bool) (uint64, error) {
+	err := c.ensureConnect()
+	if err != nil {
+		return 0, err
+	}
+
+	option := ""
+	if noreply {
+		option = "noreply"
+	}
+
+	// incr <key> <value> [noreply]\r\n
+	_, err = c.Conn.Write([]byte(fmt.Sprintf("incr %s %d %s\r\n", key, value, option)))
+	if err != nil {
+		return 0, err
+	}
+
+	if !noreply {
+		// Receive reply
+		reply, err1 := c.receiveReply()
+		if err1 != nil {
+			return 0, err1
+		}
+		switch {
+		case bytes.Equal(reply, replyNotFound):
+			return 0, ErrNotFound
+			// TODO: case ERROR, CLIENT_ERROR, SERVER_ERROR
+		}
+		newValue, err1 := strconv.ParseUint(string(reply), 10, 64)
+		if err1 != nil {
+			return 0, err1
+		}
+		return newValue, nil
+	}
+
+	return 0, nil
 }
 
 func Decrement() {
