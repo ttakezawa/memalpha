@@ -38,6 +38,7 @@ var (
 	replyNotFound  = []byte("NOT_FOUND")
 	replyDeleted   = []byte("DELETED")
 	replyTouched   = []byte("TOUCHED")
+	replyOk        = []byte("OK")
 )
 
 var (
@@ -441,8 +442,44 @@ func Stats() {
 
 //// Other commands
 
-func FlushAll() {
-	// TODO
+// FlushAll invalidates all existing items immediately (by default) or after the delay
+// specified. If delay is < 0, it ignores the delay.
+func (c *Client) FlushAll(delay int, noreply bool) error {
+	err := c.ensureConnect()
+	if err != nil {
+		return err
+	}
+
+	option := ""
+	if noreply {
+		option = "noreply"
+	}
+
+	// flush_all [delay] [noreply]\r\n
+	if delay >= 0 {
+		_, err = c.Conn.Write([]byte(fmt.Sprintf("flush_all %d %s\r\n", delay, option)))
+	} else {
+		_, err = c.Conn.Write([]byte(fmt.Sprintf("flush_all %s\r\n", option)))
+	}
+	if err != nil {
+		return err
+	}
+
+	if !noreply {
+		// Recieve reply
+		reply, err1 := c.receiveReply()
+		if err1 != nil {
+			return err1
+		}
+		switch {
+		case bytes.Equal(reply, replyOk):
+			return nil
+			// TODO: case ERROR, CLIENT_ERROR, SERVER_ERROR
+		}
+		return errors.New(string(reply))
+	}
+
+	return nil
 }
 
 func Version() {
