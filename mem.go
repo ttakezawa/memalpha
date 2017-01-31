@@ -333,7 +333,21 @@ func (c *Client) Delete(key string, noreply bool) error {
 // Increment key by value. value is the amount by which the client wants to increase
 // the item. It is a decimal representation of a 64-bit unsigned integer. The return
 // value is the new value. If noreply is true, the return value is always 0.
+// Note that Overflow in the "incr" command will wrap around the 64 bit mark.
 func (c *Client) Increment(key string, value uint64, noreply bool) (uint64, error) {
+	return c.executeIncrDecrCommand("incr", key, value, noreply)
+}
+
+// Decrement key by value. value is the amount by which the client wants to decrease
+// the item. It is a decimal representation of a 64-bit unsigned integer. The return
+// value is the new value. If noreply is true, the return value is always 0.
+// Note that underflow in the "decr" command is caught: if a client tries to decrease
+// the value below 0, the new value will be 0.
+func (c *Client) Decrement(key string, value uint64, noreply bool) (uint64, error) {
+	return c.executeIncrDecrCommand("decr", key, value, noreply)
+}
+
+func (c *Client) executeIncrDecrCommand(command string, key string, value uint64, noreply bool) (uint64, error) {
 	err := c.ensureConnect()
 	if err != nil {
 		return 0, err
@@ -344,8 +358,8 @@ func (c *Client) Increment(key string, value uint64, noreply bool) (uint64, erro
 		option = "noreply"
 	}
 
-	// incr <key> <value> [noreply]\r\n
-	_, err = c.Conn.Write([]byte(fmt.Sprintf("incr %s %d %s\r\n", key, value, option)))
+	// <incr|decr> <key> <value> [noreply]\r\n
+	_, err = c.Conn.Write([]byte(fmt.Sprintf("%s %s %d %s\r\n", command, key, value, option)))
 	if err != nil {
 		return 0, err
 	}
@@ -369,10 +383,6 @@ func (c *Client) Increment(key string, value uint64, noreply bool) (uint64, erro
 	}
 
 	return 0, nil
-}
-
-func Decrement() {
-	// TODO
 }
 
 //// Touch
