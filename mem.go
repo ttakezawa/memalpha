@@ -478,8 +478,33 @@ func (c *Client) FlushAll(delay int, noreply bool) error {
 	return nil
 }
 
-func Version() {
-	// TODO
+// Version returns the version of memcached server
+func (c *Client) Version() (string, error) {
+	err := c.ensureConnect()
+	if err != nil {
+		return "", err
+	}
+
+	// version\r\n
+	// NOTE: noreply option is not allowed.
+	_, err = c.Conn.Write([]byte("version\r\n"))
+	if err != nil {
+		return "", err
+	}
+
+	// Receive reply
+	reply, err1 := c.receiveReply()
+	if err1 != nil {
+		return "", err1
+	}
+
+	if bytes.HasPrefix(reply, []byte("VERSION ")) {
+		// "VERSION " is 8 chars.
+		return string(reply[8:]), nil
+	}
+
+	// TODO: error handling
+	return "", errors.New(string(reply))
 }
 
 func Quit() {
