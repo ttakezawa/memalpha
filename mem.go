@@ -507,6 +507,15 @@ func (c *Client) Version() (string, error) {
 	return "", errors.New(string(reply))
 }
 
-func Quit() {
-	// TODO
+// Quit closes the connection to memcached server
+func (c *Client) Quit() error {
+	err := c.ensureConnect()
+	if err != nil {
+		return err
+	}
+
+	// quit\r\n
+	// NOTE: noreply option is not allowed.
+	_, err = c.Conn.Write([]byte("quit\r\n"))
+	return err
 }
