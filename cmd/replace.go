@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/ttakezawa/memalpha"
 )
 
 // replaceCmd represents the replace command
@@ -38,6 +39,13 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("replace called")
+
+		client := memalpha.NewClient("127.0.0.1:11211")
+		err := client.Replace(args[0], args[1])
+		if err != nil {
+			fmt.Printf("%+v\n", err) // output for debug
+			return
+		}
 	},
 }
 
