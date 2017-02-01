@@ -11,10 +11,6 @@ import (
 	"strings"
 )
 
-// See
-// - https://github.com/memcached/memcached/blob/master/doc/protocol.txt
-// - https://github.com/youtube/vitess/blob/master/go/memcache/memcache.go
-
 var (
 	// ErrCacheMiss means that a Get failed because the item wasn't present.
 	ErrCacheMiss = errors.New("memcache: cache miss")
