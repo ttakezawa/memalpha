@@ -10,9 +10,9 @@ TODO: Write usage
 
 ## Todo
 
-- test
 - benchmark
 - connection pool
+- connection retry
 - ketama
 - binary protocol
 - SASL
