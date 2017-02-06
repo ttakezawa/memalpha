@@ -10,7 +10,7 @@ TODO: Write usage
 
 ## Todo
 
-- benchmark
+- set timeout
 - connection pool
 - connection retry
 - ketama
