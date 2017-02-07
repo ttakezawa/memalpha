@@ -42,7 +42,8 @@ var (
 )
 
 var (
-	bytesCrlf = []byte("\r\n")
+	bytesCrlf     = []byte("\r\n")
+	optionNoreply = "noreply"
 )
 
 // Client is a memcached client
@@ -237,9 +238,9 @@ func (c *Client) sendStorageCommand(command string, key string, value []byte, fl
 
 	if !noreply {
 		// Receive reply
-		reply, err := c.receiveReply()
-		if err != nil {
-			return err
+		reply, err1 := c.receiveReply()
+		if err1 != nil {
+			return err1
 		}
 		switch {
 		case bytes.Equal(reply, replyStored):
@@ -322,6 +323,8 @@ func (c *Client) Prepend(key string, value string) error {
 	return err
 }
 
+// CompareAndSwap is a check and set operation which means "store this data but only if no
+// one else has updated since I last fetched it."
 func (c *Client) CompareAndSwap(key string, value string, casid uint64) error {
 	var flags uint32
 	exptime := 0
@@ -342,7 +345,7 @@ func (c *Client) Delete(key string, noreply bool) error {
 
 	option := ""
 	if noreply {
-		option = "noreply"
+		option = optionNoreply
 	}
 
 	// delete <key> [noreply]\r\n
@@ -353,9 +356,9 @@ func (c *Client) Delete(key string, noreply bool) error {
 
 	if !noreply {
 		// Receive reply
-		reply, err := c.receiveReply()
-		if err != nil {
-			return err
+		reply, err1 := c.receiveReply()
+		if err1 != nil {
+			return err1
 		}
 		switch {
 		case bytes.Equal(reply, replyDeleted):
@@ -396,7 +399,7 @@ func (c *Client) executeIncrDecrCommand(command string, key string, value uint64
 
 	option := ""
 	if noreply {
-		option = "noreply"
+		option = optionNoreply
 	}
 
 	// <incr|decr> <key> <value> [noreply]\r\n
@@ -491,7 +494,7 @@ func (c *Client) FlushAll(delay int, noreply bool) error {
 
 	option := ""
 	if noreply {
-		option = "noreply"
+		option = optionNoreply
 	}
 
 	// flush_all [delay] [noreply]\r\n
