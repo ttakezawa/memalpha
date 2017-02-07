@@ -41,6 +41,10 @@ var (
 	responseEnd = []byte("END")
 )
 
+var (
+	bytesCrlf = []byte("\r\n")
+)
+
 // Client is a memcached client
 type Client struct {
 	Addr string
@@ -83,79 +87,118 @@ func (c *Client) ensureConnect() error {
 
 //// Retrieval commands
 
-func (c *Client) sendRetrieveCommand(cmd string, key string) (string, error) {
+func (c *Client) sendRetrieveCommand(cmd string, key string) error {
 	err := c.ensureConnect()
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	_, err = c.Conn.Write([]byte(fmt.Sprintf("%s %s \r\n", cmd, key)))
-	if err != nil {
-		return "", err
-	}
+	return err
+}
 
-	reader := bufio.NewReader(c.Conn)
+// returns key, value, err
+func (c *Client) receiveGetResponse(reader *bufio.Reader) (string, string, error) {
 	header, isPrefix, err := reader.ReadLine()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if isPrefix {
-		return "", errors.New("buffer is not enough")
+		return "", "", errors.New("buffer is not enough")
 	}
-
 	if bytes.Equal(header, responseEnd) {
-		return "", ErrCacheMiss
+		return "", "", ErrCacheMiss
 	}
 
 	// VALUE <key> <flags> <bytes> [<cas unique>]\r\n
 	headerChunks := strings.Split(string(header), " ")
 	fmt.Printf("debug header: %+v\n", headerChunks) // output for debug
 	if len(headerChunks) < 4 {
-		return "", fmt.Errorf("Malformed response: %s", string(header))
+		return "", "", fmt.Errorf("Malformed response: %#v", string(header))
 	}
 
-	if headerChunks[1] != key {
-		return "", fmt.Errorf("Malformed response key: %s", string(header))
-	}
+	key := headerChunks[1]
 
 	flags, err := strconv.ParseUint(headerChunks[2], 10, 16)
 	fmt.Printf("debug flags: %+v\n", flags) // output for debug
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	size, err := strconv.ParseUint(headerChunks[3], 10, 64)
 	fmt.Printf("debug size: %+v\n", size) // output for debug
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	if len(headerChunks) == 5 {
 		cas, err2 := strconv.ParseUint(headerChunks[4], 10, 64)
 		fmt.Printf("debug cas: %+v\n", cas) // output for debug
 		if err2 != nil {
-			return "", err2
+			return "", "", err2
 		}
 	}
 
-	buffer := make([]byte, size)
+	buffer := make([]byte, size+2)
 	n, err := io.ReadFull(reader, buffer)
 	fmt.Printf("debug n: %+v\n", n) // output for debug
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	return string(buffer), nil
+	// Check \r\n
+	if !bytes.HasSuffix(buffer, bytesCrlf) {
+		return "", "", errors.New("Malformed response: currupt get result end")
+	}
+
+	return key, string(buffer[:size]), nil
 }
 
 // Get takes one or more keys and returns all found items.
 func (c *Client) Get(key string) (string, error) {
-	return c.sendRetrieveCommand("get", key)
+	err := c.sendRetrieveCommand("get", key)
+	if err != nil {
+		return "", err
+	}
+
+	reader := bufio.NewReader(c.Conn)
+	_, value, err := c.receiveGetResponse(reader)
+
+	endLine, isPrefix, err := reader.ReadLine()
+	if err != nil {
+		return "", err
+	}
+	if isPrefix {
+		return "", errors.New("buffer is not enough")
+	}
+	if !bytes.Equal(endLine, responseEnd) {
+		return "", errors.New("Malformed response: currupt get result end")
+	}
+
+	return value, err
 }
 
 // Gets is an alternative get command for using with CAS.
-func (c *Client) Gets(key string) (string, error) {
-	return c.sendRetrieveCommand("gets", key)
+func (c *Client) Gets(keys []string) (map[string]string, error) {
+	err := c.sendRetrieveCommand("gets", strings.Join(keys, " "))
+	if err != nil {
+		return nil, err
+	}
+
+	m := make(map[string]string)
+	reader := bufio.NewReader(c.Conn)
+	for {
+		key, value, err1 := c.receiveGetResponse(reader)
+		if err1 != nil {
+			if err1 == ErrCacheMiss {
+				break
+			}
+			return nil, err1
+		}
+		m[key] = value
+	}
+
+	return m, nil
 }
 
 //// Storage commands
