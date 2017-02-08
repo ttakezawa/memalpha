@@ -108,7 +108,7 @@ func (c *Client) receiveGetResponse(reader *bufio.Reader) (string, string, error
 
 	// VALUE <key> <flags> <bytes> [<cas unique>]\r\n
 	headerChunks := strings.Split(string(header), " ")
-	fmt.Printf("debug header: %+v\n", headerChunks) // output for debug
+	debugf("debug header: %+v\n", headerChunks) // output for debug
 	if len(headerChunks) < 4 {
 		return "", "", fmt.Errorf("Malformed response: %#v", string(header))
 	}
@@ -116,20 +116,20 @@ func (c *Client) receiveGetResponse(reader *bufio.Reader) (string, string, error
 	key := headerChunks[1]
 
 	flags, err := strconv.ParseUint(headerChunks[2], 10, 16)
-	fmt.Printf("debug flags: %+v\n", flags) // output for debug
+	debugf("debug flags: %+v\n", flags) // output for debug
 	if err != nil {
 		return "", "", err
 	}
 
 	size, err := strconv.ParseUint(headerChunks[3], 10, 64)
-	fmt.Printf("debug size: %+v\n", size) // output for debug
+	debugf("debug size: %+v\n", size) // output for debug
 	if err != nil {
 		return "", "", err
 	}
 
 	if len(headerChunks) == 5 {
 		cas, err2 := strconv.ParseUint(headerChunks[4], 10, 64)
-		fmt.Printf("debug cas: %+v\n", cas) // output for debug
+		debugf("debug cas: %+v\n", cas) // output for debug
 		if err2 != nil {
 			return "", "", err2
 		}
@@ -146,7 +146,7 @@ func (c *Client) receiveGetResponse(reader *bufio.Reader) (string, string, error
 func (c *Client) receiveGetPayload(reader io.Reader, size uint64) ([]byte, error) {
 	buffer := make([]byte, size+2)
 	n, err := io.ReadFull(reader, buffer)
-	fmt.Printf("debug n: %+v\n", n) // output for debug
+	debugf("debug n: %+v\n", n) // output for debug
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +275,7 @@ func (c *Client) receiveReply() ([]byte, error) {
 		return nil, errors.New("buffer is not enough")
 	}
 
-	fmt.Printf("Reply: %+v\n", string(reply)) // output for debug
+	debugf("Reply: %+v\n", string(reply)) // output for debug
 
 	return reply, nil
 }
