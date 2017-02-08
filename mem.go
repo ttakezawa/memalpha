@@ -487,12 +487,40 @@ func (c *Client) Touch(key string, exptime int32, noreply bool) error {
 
 //// Statistics
 
-func Stats() {
-	// TODO
-}
+// Stats returns a map of stats.
+func (c *Client) Stats() (map[string]string, error) {
+	err := c.ensureConnect()
+	if err != nil {
+		return nil, err
+	}
 
-//// General-purpose statistics (Not Impl)
-// STAT <name> <value>\r\n
+	// Send command: stats\r\n
+	_, err = c.Conn.Write([]byte("stats\r\n"))
+	if err != nil {
+		return nil, err
+	}
+
+	m := make(map[string]string)
+	reader := bufio.NewReader(c.Conn)
+	for {
+		line, isPrefix, err1 := reader.ReadLine()
+		if err1 != nil {
+			return nil, err1
+		}
+		if isPrefix {
+			return nil, errors.New("buffer is not enough")
+		}
+		if bytes.Equal(line, responseEnd) {
+			return m, nil
+		}
+		if !bytes.HasPrefix(line, []byte("STAT ")) {
+			return nil, errors.New("Malformed stats response")
+		}
+
+		data := bytes.SplitN(line[5:], []byte(" "), 3)
+		m[string(data[0])] = string(data[1])
+	}
+}
 
 //// Other commands
 
