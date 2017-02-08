@@ -60,12 +60,7 @@ func NewClient(addr string) *Client {
 }
 
 func (c *Client) connect() error {
-	tcpAddr, err := net.ResolveTCPAddr("tcp4", c.Addr)
-	if err != nil {
-		return err
-	}
-
-	conn, err := net.DialTCP("tcp", nil, tcpAddr)
+	conn, err := net.Dial("tcp", c.Addr)
 	if err != nil {
 		return err
 	}
