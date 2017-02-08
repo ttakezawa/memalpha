@@ -231,31 +231,31 @@ func (c *Client) sendStorageCommand(command string, key string, value []byte, fl
 	if err != nil {
 		return err
 	}
-	_, err = c.Conn.Write([]byte("\r\n"))
+	_, err = c.Conn.Write(bytesCrlf)
 	if err != nil {
 		return err
 	}
 
-	if !noreply {
-		// Receive reply
-		reply, err1 := c.receiveReply()
-		if err1 != nil {
-			return err1
-		}
-		switch {
-		case bytes.Equal(reply, replyStored):
-			return nil
-		case bytes.Equal(reply, replyExists):
-			return ErrCasConflict
-		case bytes.Equal(reply, replyNotStored):
-			return ErrNotStored
-		case bytes.Equal(reply, replyNotFound):
-			return ErrNotFound
-		}
-		return errors.New(string(reply))
+	if noreply {
+		return nil
 	}
 
-	return nil
+	// Receive reply
+	reply, err := c.receiveReply()
+	if err != nil {
+		return err
+	}
+	switch {
+	case bytes.Equal(reply, replyStored):
+		return nil
+	case bytes.Equal(reply, replyExists):
+		return ErrCasConflict
+	case bytes.Equal(reply, replyNotStored):
+		return ErrNotStored
+	case bytes.Equal(reply, replyNotFound):
+		return ErrNotFound
+	}
+	return errors.New(string(reply))
 }
 
 func (c *Client) receiveReply() ([]byte, error) {
