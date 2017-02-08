@@ -41,7 +41,15 @@ to quickly create a Cobra application.`,
 		fmt.Println("stats called")
 
 		client := memalpha.NewClient("127.0.0.1:11211")
-		m, err := client.Stats()
+
+		var m map[string]string
+		var err error
+		if len(args) > 0 {
+			m, err = client.StatsArg(args[0])
+		} else {
+			m, err = client.Stats()
+		}
+
 		if err != nil {
 			fmt.Printf("err: %+v\n", err)
 			return

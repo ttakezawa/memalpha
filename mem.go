@@ -489,13 +489,23 @@ func (c *Client) Touch(key string, exptime int32, noreply bool) error {
 
 // Stats returns a map of stats.
 func (c *Client) Stats() (map[string]string, error) {
+	return c.stats([]byte("stats\r\n"))
+}
+
+// StatsArg returns a map of stats. Depending on <args>, various internal data is sent by
+// the server.
+func (c *Client) StatsArg(argument string) (map[string]string, error) {
+	return c.stats([]byte(fmt.Sprintf("stats %s\r\n", argument)))
+}
+
+func (c *Client) stats(command []byte) (map[string]string, error) {
 	err := c.ensureConnect()
 	if err != nil {
 		return nil, err
 	}
 
 	// Send command: stats\r\n
-	_, err = c.Conn.Write([]byte("stats\r\n"))
+	_, err = c.Conn.Write(command)
 	if err != nil {
 		return nil, err
 	}
