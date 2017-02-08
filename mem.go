@@ -140,19 +140,28 @@ func (c *Client) receiveGetResponse(reader *bufio.Reader) (string, string, error
 		}
 	}
 
-	buffer := make([]byte, size+2)
-	n, err := io.ReadFull(reader, buffer)
-	fmt.Printf("debug n: %+v\n", n) // output for debug
+	buffer, err := c.receiveGetPayload(reader, size)
 	if err != nil {
 		return "", "", err
 	}
 
-	// Check \r\n
-	if !bytes.HasSuffix(buffer, bytesCrlf) {
-		return "", "", errors.New("Malformed response: currupt get result end")
+	return key, string(buffer[:size]), nil
+}
+
+func (c *Client) receiveGetPayload(reader io.Reader, size uint64) ([]byte, error) {
+	buffer := make([]byte, size+2)
+	n, err := io.ReadFull(reader, buffer)
+	fmt.Printf("debug n: %+v\n", n) // output for debug
+	if err != nil {
+		return nil, err
 	}
 
-	return key, string(buffer[:size]), nil
+	// Check \r\n
+	if !bytes.HasSuffix(buffer, bytesCrlf) {
+		return nil, errors.New("Malformed response: currupt get result end")
+	}
+
+	return buffer, nil
 }
 
 // Get takes one or more keys and returns all found items.
@@ -240,7 +249,10 @@ func (c *Client) sendStorageCommand(command string, key string, value []byte, fl
 		return nil
 	}
 
-	// Receive reply
+	return c.receiveReplyToStorageCommand()
+}
+
+func (c *Client) receiveReplyToStorageCommand() error {
 	reply, err := c.receiveReply()
 	if err != nil {
 		return err
