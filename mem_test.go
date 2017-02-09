@@ -19,61 +19,71 @@ func freePort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-func startMemcached(cb func(*Client)) error {
+type server struct {
+	cmd    *exec.Cmd
+	client *Client
+}
+
+func newServer() *server {
+	return &server{}
+}
+
+func (s *server) Start() error {
 	port, err := freePort()
 	if err != nil {
 		return err
 	}
 
-	cmd := exec.Command("memcached", "-p", strconv.Itoa(port))
-	if err = cmd.Start(); err != nil {
+	s.cmd = exec.Command("memcached", "-p", strconv.Itoa(port))
+	if err = s.cmd.Start(); err != nil {
 		return err
 	}
-	defer cmd.Wait()
-	defer cmd.Process.Kill()
 
-	client := NewClient(fmt.Sprintf("localhost:%d", port))
+	s.client = NewClient(fmt.Sprintf("localhost:%d", port))
 
 	// Wait a bit for the socket to appear.
 	for i := 0; i < 10; i++ {
-		if err := client.connect(); err == nil {
-			break
+		err = s.client.ensureConnect()
+		if err == nil {
+			return nil
 		}
 		time.Sleep(time.Duration(25*i) * time.Millisecond)
 	}
 
-	cb(client)
+	return err
+}
 
-	return nil
+func (s *server) Shutdown() error {
+	_ = s.cmd.Process.Kill()
+	return s.cmd.Wait()
 }
 
 func TestLocalhost(t *testing.T) {
-	err := startMemcached(func(c *Client) {
-		testSuite(t, c)
-	})
-
+	memd := newServer()
+	err := memd.Start()
 	if err != nil {
 		t.Skipf("skipping test; couldn't start memcached: %s", err)
 	}
-}
+	defer memd.Shutdown()
 
-func testSuite(t *testing.T, c *Client) {
-	checkErr := func(err error, format string, args ...interface{}) {
-		if err != nil {
-			t.Fatalf(format, args...)
-		}
-	}
+	c := memd.client
 
 	// Set
-	err := c.Set("foo", "fooval")
-	checkErr(err, "first set(foo): %v", err)
 	err = c.Set("foo", "fooval")
-	checkErr(err, "second set(foo): %v", err)
+	if err != nil {
+		t.Fatalf("first set(foo): %v", err)
+	}
+	err = c.Set("foo", "fooval")
+	if err != nil {
+		t.Fatalf("second set(foo): %v", err)
+	}
 
 	// Get
 	val, err := c.Get("foo")
-	checkErr(err, "get(foo): %v", err)
+	if err != nil {
+		t.Fatalf("get(foo): %v", err)
+	}
 	if val != "fooval" {
-		t.Errorf("get(foo) Value = %q, want fooval", val)
+		t.Fatalf("get(foo) Value = %q, want fooval", val)
 	}
 }
