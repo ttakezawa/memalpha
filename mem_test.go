@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -85,6 +86,30 @@ func TestLocalhost(t *testing.T) {
 	}
 	if val != "fooval" {
 		t.Fatalf("get(foo) Value = %q, want fooval", val)
+	}
+
+	// Gets
+	err = c.Set("bar", "barval")
+	if err != nil {
+		t.Fatalf("set(bar): %v", err)
+	}
+	m, err := c.Gets([]string{"foo", "bar"})
+	if err != nil {
+		t.Fatalf("gets(foo, bar): %v", err)
+	}
+	expected := map[string]string{"foo": "fooval", "bar": "barval"}
+	if !reflect.DeepEqual(m, expected) {
+		t.Fatalf("gets(foo, bar) Value = %+v, want %+v", m, expected)
+	}
+
+	// Add
+	err = c.Add("baz", "baz1")
+	if err != nil {
+		t.Fatalf("first add(baz): %v", err)
+	}
+	err = c.Add("baz", "baz2")
+	if err != ErrNotStored {
+		t.Fatalf("second add(baz) Error = ErrNotStored, want %+v", err)
 	}
 
 	// Replace
@@ -190,7 +215,7 @@ func TestLocalhost(t *testing.T) {
 	}
 
 	// Stats
-	m, err := c.Stats()
+	m, err = c.Stats()
 	if err != nil {
 		t.Fatalf("stats(): %v", err)
 	}
