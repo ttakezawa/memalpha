@@ -43,7 +43,7 @@ func (s *server) Start() error {
 
 	// Wait a bit for the socket to appear.
 	for i := 0; i < 10; i++ {
-		err = s.client.ensureConnect()
+		err = s.client.ensureConnected()
 		if err == nil {
 			return nil
 		}

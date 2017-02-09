@@ -49,53 +49,46 @@ var (
 // Client is a memcached client
 type Client struct {
 	Addr string
-	Conn net.Conn
+	conn net.Conn
+	rw   *bufio.ReadWriter
 }
 
 // NewClient returns a new Client.
 func NewClient(addr string) *Client {
 	client := &Client{Addr: addr}
 	return client
-
 }
 
-func (c *Client) connect() error {
+func (c *Client) ensureConnected() error {
 	conn, err := net.Dial("tcp", c.Addr)
 	if err != nil {
 		return err
 	}
 
-	c.Conn = conn
+	c.conn = conn
+	c.rw = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 	return nil
-}
-
-func (c *Client) isConnected() bool {
-	return c.Conn != nil
-}
-
-func (c *Client) ensureConnect() error {
-	if c.isConnected() {
-		return nil
-	}
-
-	return c.connect()
 }
 
 //// Retrieval commands
 
 func (c *Client) sendRetrieveCommand(cmd string, key string) error {
-	err := c.ensureConnect()
+	err := c.ensureConnected()
 	if err != nil {
 		return err
 	}
 
-	_, err = c.Conn.Write([]byte(fmt.Sprintf("%s %s \r\n", cmd, key)))
-	return err
+	_, err = c.rw.Write([]byte(fmt.Sprintf("%s %s\r\n", cmd, key)))
+	if err != nil {
+		return err
+	}
+
+	return c.rw.Flush()
 }
 
 // returns key, value, err
-func (c *Client) receiveGetResponse(reader *bufio.Reader) (string, string, error) {
-	header, isPrefix, err := reader.ReadLine()
+func (c *Client) receiveGetResponse() (string, string, error) {
+	header, isPrefix, err := c.rw.ReadLine()
 	if err != nil {
 		return "", "", err
 	}
@@ -135,7 +128,7 @@ func (c *Client) receiveGetResponse(reader *bufio.Reader) (string, string, error
 		}
 	}
 
-	buffer, err := c.receiveGetPayload(reader, size)
+	buffer, err := c.receiveGetPayload(size)
 	if err != nil {
 		return "", "", err
 	}
@@ -143,9 +136,9 @@ func (c *Client) receiveGetResponse(reader *bufio.Reader) (string, string, error
 	return key, string(buffer[:size]), nil
 }
 
-func (c *Client) receiveGetPayload(reader io.Reader, size uint64) ([]byte, error) {
+func (c *Client) receiveGetPayload(size uint64) ([]byte, error) {
 	buffer := make([]byte, size+2)
-	n, err := io.ReadFull(reader, buffer)
+	n, err := io.ReadFull(c.rw, buffer)
 	debugf("debug n: %+v\n", n) // output for debug
 	if err != nil {
 		return nil, err
@@ -166,10 +159,12 @@ func (c *Client) Get(key string) (string, error) {
 		return "", err
 	}
 
-	reader := bufio.NewReader(c.Conn)
-	_, value, err := c.receiveGetResponse(reader)
+	_, value, err := c.receiveGetResponse()
+	if err != nil {
+		return "", err
+	}
 
-	endLine, isPrefix, err := reader.ReadLine()
+	endLine, isPrefix, err := c.rw.ReadLine()
 	if err != nil {
 		return "", err
 	}
@@ -191,9 +186,8 @@ func (c *Client) Gets(keys []string) (map[string]string, error) {
 	}
 
 	m := make(map[string]string)
-	reader := bufio.NewReader(c.Conn)
 	for {
-		key, value, err1 := c.receiveGetResponse(reader)
+		key, value, err1 := c.receiveGetResponse()
 		if err1 != nil {
 			if err1 == ErrCacheMiss {
 				break
@@ -209,7 +203,7 @@ func (c *Client) Gets(keys []string) (map[string]string, error) {
 //// Storage commands
 
 func (c *Client) sendStorageCommand(command string, key string, value []byte, flags uint32, exptime int, casid uint64, noreply bool) error {
-	err := c.ensureConnect()
+	err := c.ensureConnected()
 	if err != nil {
 		return err
 	}
@@ -221,21 +215,26 @@ func (c *Client) sendStorageCommand(command string, key string, value []byte, fl
 
 	if command == "cas" {
 		// Send command: cas       <key> <flags> <exptime> <bytes> <cas unique> [noreply]\r\n
-		_, err = c.Conn.Write([]byte(fmt.Sprintf("%s %s %d %d %d %d %s\r\n", command, key, flags, exptime, len(value), casid, option)))
+		_, err = c.rw.Write([]byte(fmt.Sprintf("%s %s %d %d %d %d %s\r\n", command, key, flags, exptime, len(value), casid, option)))
 	} else {
 		// Send command: <command> <key> <flags> <exptime> <bytes> [noreply]\r\n
-		_, err = c.Conn.Write([]byte(fmt.Sprintf("%s %s %d %d %d %s\r\n", command, key, flags, exptime, len(value), option)))
+		_, err = c.rw.Write([]byte(fmt.Sprintf("%s %s %d %d %d %s\r\n", command, key, flags, exptime, len(value), option)))
 	}
 	if err != nil {
 		return err
 	}
 
 	// Send data block: <data block>\r\n
-	_, err = c.Conn.Write(value)
+	_, err = c.rw.Write(value)
 	if err != nil {
 		return err
 	}
-	_, err = c.Conn.Write(bytesCrlf)
+	_, err = c.rw.Write(bytesCrlf)
+	if err != nil {
+		return err
+	}
+
+	err = c.rw.Flush()
 	if err != nil {
 		return err
 	}
@@ -266,8 +265,7 @@ func (c *Client) receiveReplyToStorageCommand() error {
 }
 
 func (c *Client) receiveReply() ([]byte, error) {
-	reader := bufio.NewReader(c.Conn)
-	reply, isPrefix, err := reader.ReadLine()
+	reply, isPrefix, err := c.rw.ReadLine()
 	if err != nil {
 		return nil, err
 	}
@@ -345,7 +343,7 @@ func (c *Client) CompareAndSwap(key string, value string, casid uint64) error {
 
 // Delete deletes the item with the provided key
 func (c *Client) Delete(key string, noreply bool) error {
-	err := c.ensureConnect()
+	err := c.ensureConnected()
 	if err != nil {
 		return err
 	}
@@ -356,7 +354,12 @@ func (c *Client) Delete(key string, noreply bool) error {
 	}
 
 	// delete <key> [noreply]\r\n
-	_, err = c.Conn.Write([]byte(fmt.Sprintf("delete %s %s\r\n", key, option)))
+	_, err = c.rw.Write([]byte(fmt.Sprintf("delete %s %s\r\n", key, option)))
+	if err != nil {
+		return err
+	}
+
+	err = c.rw.Flush()
 	if err != nil {
 		return err
 	}
@@ -399,7 +402,7 @@ func (c *Client) Decrement(key string, value uint64, noreply bool) (uint64, erro
 }
 
 func (c *Client) executeIncrDecrCommand(command string, key string, value uint64, noreply bool) (uint64, error) {
-	err := c.ensureConnect()
+	err := c.ensureConnected()
 	if err != nil {
 		return 0, err
 	}
@@ -410,7 +413,12 @@ func (c *Client) executeIncrDecrCommand(command string, key string, value uint64
 	}
 
 	// <incr|decr> <key> <value> [noreply]\r\n
-	_, err = c.Conn.Write([]byte(fmt.Sprintf("%s %s %d %s\r\n", command, key, value, option)))
+	_, err = c.rw.Write([]byte(fmt.Sprintf("%s %s %d %s\r\n", command, key, value, option)))
+	if err != nil {
+		return 0, err
+	}
+
+	err = c.rw.Flush()
 	if err != nil {
 		return 0, err
 	}
@@ -440,7 +448,7 @@ func (c *Client) executeIncrDecrCommand(command string, key string, value uint64
 
 // Touch is used to update the expiration time of an existing item without fetching it.
 func (c *Client) Touch(key string, exptime int32, noreply bool) error {
-	err := c.ensureConnect()
+	err := c.ensureConnected()
 	if err != nil {
 		return err
 	}
@@ -451,7 +459,12 @@ func (c *Client) Touch(key string, exptime int32, noreply bool) error {
 	}
 
 	// touch <key> <exptime> [noreply]\r\n
-	_, err = c.Conn.Write([]byte(fmt.Sprintf("touch %s %d %s\r\n", key, exptime, option)))
+	_, err = c.rw.Write([]byte(fmt.Sprintf("touch %s %d %s\r\n", key, exptime, option)))
+	if err != nil {
+		return err
+	}
+
+	err = c.rw.Flush()
 	if err != nil {
 		return err
 	}
@@ -494,21 +507,25 @@ func (c *Client) StatsArg(argument string) (map[string]string, error) {
 }
 
 func (c *Client) stats(command []byte) (map[string]string, error) {
-	err := c.ensureConnect()
+	err := c.ensureConnected()
 	if err != nil {
 		return nil, err
 	}
 
 	// Send command: stats\r\n
-	_, err = c.Conn.Write(command)
+	_, err = c.rw.Write(command)
+	if err != nil {
+		return nil, err
+	}
+
+	err = c.rw.Flush()
 	if err != nil {
 		return nil, err
 	}
 
 	m := make(map[string]string)
-	reader := bufio.NewReader(c.Conn)
 	for {
-		line, isPrefix, err1 := reader.ReadLine()
+		line, isPrefix, err1 := c.rw.ReadLine()
 		if err1 != nil {
 			return nil, err1
 		}
@@ -532,7 +549,7 @@ func (c *Client) stats(command []byte) (map[string]string, error) {
 // FlushAll invalidates all existing items immediately (by default) or after the delay
 // specified. If delay is < 0, it ignores the delay.
 func (c *Client) FlushAll(delay int, noreply bool) error {
-	err := c.ensureConnect()
+	err := c.ensureConnected()
 	if err != nil {
 		return err
 	}
@@ -544,10 +561,15 @@ func (c *Client) FlushAll(delay int, noreply bool) error {
 
 	// flush_all [delay] [noreply]\r\n
 	if delay >= 0 {
-		_, err = c.Conn.Write([]byte(fmt.Sprintf("flush_all %d %s\r\n", delay, option)))
+		_, err = c.rw.Write([]byte(fmt.Sprintf("flush_all %d %s\r\n", delay, option)))
 	} else {
-		_, err = c.Conn.Write([]byte(fmt.Sprintf("flush_all %s\r\n", option)))
+		_, err = c.rw.Write([]byte(fmt.Sprintf("flush_all %s\r\n", option)))
 	}
+	if err != nil {
+		return err
+	}
+
+	err = c.rw.Flush()
 	if err != nil {
 		return err
 	}
@@ -571,14 +593,19 @@ func (c *Client) FlushAll(delay int, noreply bool) error {
 
 // Version returns the version of memcached server
 func (c *Client) Version() (string, error) {
-	err := c.ensureConnect()
+	err := c.ensureConnected()
 	if err != nil {
 		return "", err
 	}
 
 	// version\r\n
 	// NOTE: noreply option is not allowed.
-	_, err = c.Conn.Write([]byte("version\r\n"))
+	_, err = c.rw.Write([]byte("version\r\n"))
+	if err != nil {
+		return "", err
+	}
+
+	err = c.rw.Flush()
 	if err != nil {
 		return "", err
 	}
@@ -600,13 +627,17 @@ func (c *Client) Version() (string, error) {
 
 // Quit closes the connection to memcached server
 func (c *Client) Quit() error {
-	err := c.ensureConnect()
+	err := c.ensureConnected()
 	if err != nil {
 		return err
 	}
 
 	// quit\r\n
 	// NOTE: noreply option is not allowed.
-	_, err = c.Conn.Write([]byte("quit\r\n"))
-	return err
+	_, err = c.rw.Write([]byte("quit\r\n"))
+	if err != nil {
+		return err
+	}
+
+	return c.rw.Flush()
 }
