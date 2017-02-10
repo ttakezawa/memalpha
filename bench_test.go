@@ -4,7 +4,7 @@ import "testing"
 
 func benchmarkSet(b *testing.B, c *Client) {
 	key := "foo"
-	value := "bar"
+	value := []byte("bar")
 	b.SetBytes(int64(len(key) + len(value)))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -17,7 +17,7 @@ func benchmarkSet(b *testing.B, c *Client) {
 
 func benchmarkSetGet(b *testing.B, c *Client) {
 	key := "foo"
-	value := "bar"
+	value := []byte("bar")
 	b.SetBytes(int64(len(key) + len(value)))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

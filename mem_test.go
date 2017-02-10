@@ -1,6 +1,7 @@
 package memalpha
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os/exec"
@@ -70,11 +71,11 @@ func TestLocalhost(t *testing.T) {
 	c := memd.client
 
 	// Set
-	err = c.Set("foo", "fooval")
+	err = c.Set("foo", []byte("fooval"))
 	if err != nil {
 		t.Fatalf("first set(foo): %v", err)
 	}
-	err = c.Set("foo", "fooval")
+	err = c.Set("foo", []byte("fooval"))
 	if err != nil {
 		t.Fatalf("second set(foo): %v", err)
 	}
@@ -84,12 +85,12 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if val != "fooval" {
+	if !bytes.Equal(val, []byte("fooval")) {
 		t.Fatalf("get(foo) Value = %q, want fooval", val)
 	}
 
 	// Gets
-	err = c.Set("bar", "barval")
+	err = c.Set("bar", []byte("barval"))
 	if err != nil {
 		t.Fatalf("set(bar): %v", err)
 	}
@@ -97,27 +98,27 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gets(foo, bar): %v", err)
 	}
-	expected := map[string]string{"foo": "fooval", "bar": "barval"}
+	expected := map[string][]byte{"foo": []byte("fooval"), "bar": []byte("barval")}
 	if !reflect.DeepEqual(m, expected) {
 		t.Fatalf("gets(foo, bar) Value = %+v, want %+v", m, expected)
 	}
 
 	// Add
-	err = c.Add("baz", "baz1")
+	err = c.Add("baz", []byte("baz1"))
 	if err != nil {
 		t.Fatalf("first add(baz): %v", err)
 	}
-	err = c.Add("baz", "baz2")
+	err = c.Add("baz", []byte("baz2"))
 	if err != ErrNotStored {
 		t.Fatalf("second add(baz) Error = ErrNotStored, want %+v", err)
 	}
 
 	// Replace
-	err = c.Set("foo", "fooval")
+	err = c.Set("foo", []byte("fooval"))
 	if err != nil {
 		t.Fatalf("set(foo): %v", err)
 	}
-	err = c.Replace("foo", "fooval2")
+	err = c.Replace("foo", []byte("fooval2"))
 	if err != nil {
 		t.Fatalf("replace(foo): %v", err)
 	}
@@ -125,12 +126,12 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if val != "fooval2" {
+	if !bytes.Equal(val, []byte("fooval2")) {
 		t.Fatalf("replace(foo, fooval2) then, get(foo) Value = %q, want fooval2", val)
 	}
 
 	// Append
-	err = c.Append("foo", "suffix")
+	err = c.Append("foo", []byte("suffix"))
 	if err != nil {
 		t.Fatalf("append(foo, suffix): %v", err)
 	}
@@ -138,12 +139,12 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if val != "fooval2suffix" {
+	if !bytes.Equal(val, []byte("fooval2suffix")) {
 		t.Fatalf("append(foo, suffix) then, get(foo) Value = %q, want fooval2suffix", val)
 	}
 
 	// Prepend
-	err = c.Prepend("foo", "prefix")
+	err = c.Prepend("foo", []byte("prefix"))
 	if err != nil {
 		t.Fatalf("prepend(foo, prefix): %v", err)
 	}
@@ -151,7 +152,7 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if val != "prefixfooval2suffix" {
+	if !bytes.Equal(val, []byte("prefixfooval2suffix")) {
 		t.Fatalf("prepend(foo, prefix) then, get(foo) Value = %q, want prefixfooval2suffix", val)
 	}
 
@@ -168,7 +169,7 @@ func TestLocalhost(t *testing.T) {
 	}
 
 	// Increment
-	err = c.Set("foo", "35")
+	err = c.Set("foo", []byte("35"))
 	if err != nil {
 		t.Fatalf("set(foo): %v", err)
 	}
@@ -192,7 +193,7 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if val != "32" {
+	if !bytes.Equal(val, []byte("32")) {
 		t.Fatalf("get(foo) Value = %q, want 32", val)
 	}
 
@@ -205,7 +206,7 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if val != "32" {
+	if !bytes.Equal(val, []byte("32")) {
 		t.Fatalf("get(foo) Value = %q, want 32", val)
 	}
 	time.Sleep(2 * time.Second)
@@ -215,16 +216,16 @@ func TestLocalhost(t *testing.T) {
 	}
 
 	// Stats
-	m, err = c.Stats()
+	stats, err := c.Stats()
 	if err != nil {
 		t.Fatalf("stats(): %v", err)
 	}
-	if len(m) < 2 {
-		t.Fatalf("stats(): len(Value) = %q, want len(value) > 2", m)
+	if len(stats) < 2 {
+		t.Fatalf("stats(): len(Value) = %q, want len(value) > 2", stats)
 	}
 
 	// FlushAll
-	err = c.Set("foo", "bar")
+	err = c.Set("foo", []byte("bar"))
 	if err != nil {
 		t.Fatalf("set(foo): %v", err)
 	}
@@ -238,12 +239,12 @@ func TestLocalhost(t *testing.T) {
 	}
 
 	// Version
-	val, err = c.Version()
+	ver, err := c.Version()
 	if err != nil {
 		t.Fatalf("version(): %v", err)
 	}
-	if len(val) == 0 {
-		t.Fatalf("version() Value = %q, want len(value) > 0", val)
+	if len(ver) == 0 {
+		t.Fatalf("version() Value = %q, want len(value) > 0", ver)
 	}
 
 	// Quit

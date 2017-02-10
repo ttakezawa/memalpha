@@ -87,23 +87,23 @@ func (c *Client) sendRetrieveCommand(cmd string, key string) error {
 }
 
 // returns key, value, err
-func (c *Client) receiveGetResponse() (string, string, error) {
+func (c *Client) receiveGetResponse() (string, []byte, error) {
 	header, isPrefix, err := c.rw.ReadLine()
 	if err != nil {
-		return "", "", err
+		return "", nil, err
 	}
 	if isPrefix {
-		return "", "", errors.New("buffer is not enough")
+		return "", nil, errors.New("buffer is not enough")
 	}
 	if bytes.Equal(header, responseEnd) {
-		return "", "", ErrCacheMiss
+		return "", nil, ErrCacheMiss
 	}
 
 	// VALUE <key> <flags> <bytes> [<cas unique>]\r\n
 	headerChunks := strings.Split(string(header), " ")
 	debugf("debug header: %+v\n", headerChunks) // output for debug
 	if len(headerChunks) < 4 {
-		return "", "", fmt.Errorf("Malformed response: %#v", string(header))
+		return "", nil, fmt.Errorf("Malformed response: %#v", string(header))
 	}
 
 	key := headerChunks[1]
@@ -111,29 +111,29 @@ func (c *Client) receiveGetResponse() (string, string, error) {
 	flags, err := strconv.ParseUint(headerChunks[2], 10, 16)
 	debugf("debug flags: %+v\n", flags) // output for debug
 	if err != nil {
-		return "", "", err
+		return "", nil, err
 	}
 
 	size, err := strconv.ParseUint(headerChunks[3], 10, 64)
 	debugf("debug size: %+v\n", size) // output for debug
 	if err != nil {
-		return "", "", err
+		return "", nil, err
 	}
 
 	if len(headerChunks) == 5 {
 		cas, err2 := strconv.ParseUint(headerChunks[4], 10, 64)
 		debugf("debug cas: %+v\n", cas) // output for debug
 		if err2 != nil {
-			return "", "", err2
+			return "", nil, err2
 		}
 	}
 
 	buffer, err := c.receiveGetPayload(size)
 	if err != nil {
-		return "", "", err
+		return "", nil, err
 	}
 
-	return key, string(buffer[:size]), nil
+	return key, buffer[:size], nil
 }
 
 func (c *Client) receiveGetPayload(size uint64) ([]byte, error) {
@@ -153,39 +153,39 @@ func (c *Client) receiveGetPayload(size uint64) ([]byte, error) {
 }
 
 // Get takes one or more keys and returns all found items.
-func (c *Client) Get(key string) (string, error) {
+func (c *Client) Get(key string) ([]byte, error) {
 	err := c.sendRetrieveCommand("get", key)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	_, value, err := c.receiveGetResponse()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	endLine, isPrefix, err := c.rw.ReadLine()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if isPrefix {
-		return "", errors.New("buffer is not enough")
+		return nil, errors.New("buffer is not enough")
 	}
 	if !bytes.Equal(endLine, responseEnd) {
-		return "", errors.New("Malformed response: currupt get result end")
+		return nil, errors.New("Malformed response: currupt get result end")
 	}
 
 	return value, err
 }
 
 // Gets is an alternative get command for using with CAS.
-func (c *Client) Gets(keys []string) (map[string]string, error) {
+func (c *Client) Gets(keys []string) (map[string][]byte, error) {
 	err := c.sendRetrieveCommand("gets", strings.Join(keys, " "))
 	if err != nil {
 		return nil, err
 	}
 
-	m := make(map[string]string)
+	m := make(map[string][]byte)
 	for {
 		key, value, err1 := c.receiveGetResponse()
 		if err1 != nil {
@@ -279,63 +279,63 @@ func (c *Client) receiveReply() ([]byte, error) {
 }
 
 // Set key
-func (c *Client) Set(key string, value string) error {
+func (c *Client) Set(key string, value []byte) error {
 	var flags uint32
 	exptime := 0
 	noreply := false
 
-	err := c.sendStorageCommand("set", key, []byte(value), flags, exptime, 0, noreply)
+	err := c.sendStorageCommand("set", key, value, flags, exptime, 0, noreply)
 	return err
 }
 
 // Add key
-func (c *Client) Add(key string, value string) error {
+func (c *Client) Add(key string, value []byte) error {
 	var flags uint32
 	exptime := 0
 	noreply := false
 
-	err := c.sendStorageCommand("add", key, []byte(value), flags, exptime, 0, noreply)
+	err := c.sendStorageCommand("add", key, value, flags, exptime, 0, noreply)
 	return err
 }
 
 // Replace key
-func (c *Client) Replace(key string, value string) error {
+func (c *Client) Replace(key string, value []byte) error {
 	var flags uint32
 	exptime := 0
 	noreply := false
 
-	err := c.sendStorageCommand("replace", key, []byte(value), flags, exptime, 0, noreply)
+	err := c.sendStorageCommand("replace", key, value, flags, exptime, 0, noreply)
 	return err
 }
 
 // Append key
-func (c *Client) Append(key string, value string) error {
+func (c *Client) Append(key string, value []byte) error {
 	var flags uint32
 	exptime := 0
 	noreply := false
 
-	err := c.sendStorageCommand("append", key, []byte(value), flags, exptime, 0, noreply)
+	err := c.sendStorageCommand("append", key, value, flags, exptime, 0, noreply)
 	return err
 }
 
 // Prepend key
-func (c *Client) Prepend(key string, value string) error {
+func (c *Client) Prepend(key string, value []byte) error {
 	var flags uint32
 	exptime := 0
 	noreply := false
 
-	err := c.sendStorageCommand("prepend", key, []byte(value), flags, exptime, 0, noreply)
+	err := c.sendStorageCommand("prepend", key, value, flags, exptime, 0, noreply)
 	return err
 }
 
 // CompareAndSwap is a check and set operation which means "store this data but only if no
 // one else has updated since I last fetched it."
-func (c *Client) CompareAndSwap(key string, value string, casid uint64) error {
+func (c *Client) CompareAndSwap(key string, value []byte, casid uint64) error {
 	var flags uint32
 	exptime := 0
 	noreply := false
 
-	err := c.sendStorageCommand("cas", key, []byte(value), flags, exptime, casid, noreply)
+	err := c.sendStorageCommand("cas", key, value, flags, exptime, casid, noreply)
 	return err
 }
 
