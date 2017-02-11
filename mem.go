@@ -53,6 +53,13 @@ type Client struct {
 	rw   *bufio.ReadWriter
 }
 
+// Response is a response of get
+type Response struct {
+	Value []byte
+	Flags uint32
+	CasID uint64
+}
+
 // NewClient returns a new Client.
 func NewClient(addr string) *Client {
 	client := &Client{Addr: addr}
@@ -86,8 +93,8 @@ func (c *Client) sendRetrieveCommand(cmd string, key string) error {
 	return c.rw.Flush()
 }
 
-// returns key, value, err
-func (c *Client) receiveGetResponse() (string, []byte, error) {
+// returns key, value, casId, flags, err
+func (c *Client) receiveGetResponse() (string, *Response, error) {
 	header, isPrefix, err := c.rw.ReadLine()
 	if err != nil {
 		return "", nil, err
@@ -106,13 +113,15 @@ func (c *Client) receiveGetResponse() (string, []byte, error) {
 		return "", nil, fmt.Errorf("Malformed response: %#v", string(header))
 	}
 
+	response := &Response{}
 	key := headerChunks[1]
 
-	flags, err := strconv.ParseUint(headerChunks[2], 10, 16)
+	flags, err := strconv.ParseUint(headerChunks[2], 10, 32)
 	debugf("debug flags: %+v\n", flags) // output for debug
 	if err != nil {
 		return "", nil, err
 	}
+	response.Flags = uint32(flags)
 
 	size, err := strconv.ParseUint(headerChunks[3], 10, 64)
 	debugf("debug size: %+v\n", size) // output for debug
@@ -121,19 +130,20 @@ func (c *Client) receiveGetResponse() (string, []byte, error) {
 	}
 
 	if len(headerChunks) == 5 {
-		cas, err2 := strconv.ParseUint(headerChunks[4], 10, 64)
-		debugf("debug cas: %+v\n", cas) // output for debug
-		if err2 != nil {
-			return "", nil, err2
+		response.CasID, err = strconv.ParseUint(headerChunks[4], 10, 64)
+		debugf("debug cas: %+v\n", response.CasID) // output for debug
+		if err != nil {
+			return "", nil, err
 		}
 	}
 
-	buffer, err := c.receiveGetPayload(size)
+	payload, err := c.receiveGetPayload(size)
 	if err != nil {
 		return "", nil, err
 	}
 
-	return key, buffer[:size], nil
+	response.Value = payload[:size]
+	return key, response, nil
 }
 
 func (c *Client) receiveGetPayload(size uint64) ([]byte, error) {
@@ -152,18 +162,19 @@ func (c *Client) receiveGetPayload(size uint64) ([]byte, error) {
 	return buffer, nil
 }
 
-// Get takes one or more keys and returns all found items.
-func (c *Client) Get(key string) ([]byte, error) {
+// Get returns a value, cas id, flags and error.
+func (c *Client) Get(key string) (*Response, error) {
 	err := c.sendRetrieveCommand("get", key)
 	if err != nil {
 		return nil, err
 	}
 
-	_, value, err := c.receiveGetResponse()
+	_, response, err := c.receiveGetResponse()
 	if err != nil {
 		return nil, err
 	}
 
+	// Confirm END
 	endLine, isPrefix, err := c.rw.ReadLine()
 	if err != nil {
 		return nil, err
@@ -175,26 +186,26 @@ func (c *Client) Get(key string) ([]byte, error) {
 		return nil, errors.New("Malformed response: currupt get result end")
 	}
 
-	return value, err
+	return response, nil
 }
 
 // Gets is an alternative get command for using with CAS.
-func (c *Client) Gets(keys []string) (map[string][]byte, error) {
+func (c *Client) Gets(keys []string) (map[string]*Response, error) {
 	err := c.sendRetrieveCommand("gets", strings.Join(keys, " "))
 	if err != nil {
 		return nil, err
 	}
 
-	m := make(map[string][]byte)
+	m := make(map[string]*Response)
 	for {
-		key, value, err1 := c.receiveGetResponse()
+		key, response, err1 := c.receiveGetResponse()
 		if err1 != nil {
 			if err1 == ErrCacheMiss {
 				break
 			}
 			return nil, err1
 		}
-		m[key] = value
+		m[key] = response
 	}
 
 	return m, nil

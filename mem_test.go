@@ -81,12 +81,12 @@ func TestLocalhost(t *testing.T) {
 	}
 
 	// Get
-	val, err := c.Get("foo")
+	response, err := c.Get("foo")
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if !bytes.Equal(val, []byte("fooval")) {
-		t.Fatalf("get(foo) Value = %q, want fooval", val)
+	if !bytes.Equal(response.Value, []byte("fooval")) {
+		t.Fatalf("get(foo) Value = %q, want fooval", response.Value)
 	}
 
 	// Gets
@@ -98,8 +98,12 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gets(foo, bar): %v", err)
 	}
-	expected := map[string][]byte{"foo": []byte("fooval"), "bar": []byte("barval")}
-	if !reflect.DeepEqual(m, expected) {
+	keyToValue := make(map[string]string)
+	for key, response := range m {
+		keyToValue[key] = string(response.Value)
+	}
+	expected := map[string]string{"foo": "fooval", "bar": "barval"}
+	if !reflect.DeepEqual(keyToValue, expected) {
 		t.Fatalf("gets(foo, bar) Value = %+v, want %+v", m, expected)
 	}
 
@@ -122,12 +126,12 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("replace(foo): %v", err)
 	}
-	val, err = c.Get("foo")
+	response, err = c.Get("foo")
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if !bytes.Equal(val, []byte("fooval2")) {
-		t.Fatalf("replace(foo, fooval2) then, get(foo) Value = %q, want fooval2", val)
+	if !bytes.Equal(response.Value, []byte("fooval2")) {
+		t.Fatalf("replace(foo, fooval2) then, get(foo) Value = %q, want fooval2", response.Value)
 	}
 
 	// Append
@@ -135,12 +139,12 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("append(foo, suffix): %v", err)
 	}
-	val, err = c.Get("foo")
+	response, err = c.Get("foo")
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if !bytes.Equal(val, []byte("fooval2suffix")) {
-		t.Fatalf("append(foo, suffix) then, get(foo) Value = %q, want fooval2suffix", val)
+	if !bytes.Equal(response.Value, []byte("fooval2suffix")) {
+		t.Fatalf("append(foo, suffix) then, get(foo) Value = %q, want fooval2suffix", response.Value)
 	}
 
 	// Prepend
@@ -148,24 +152,36 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepend(foo, prefix): %v", err)
 	}
-	val, err = c.Get("foo")
+	response, err = c.Get("foo")
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if !bytes.Equal(val, []byte("prefixfooval2suffix")) {
-		t.Fatalf("prepend(foo, prefix) then, get(foo) Value = %q, want prefixfooval2suffix", val)
+	if !bytes.Equal(response.Value, []byte("prefixfooval2suffix")) {
+		t.Fatalf("prepend(foo, prefix) then, get(foo) Value = %q, want prefixfooval2suffix", response.Value)
 	}
 
-	// TODO: Test CompareAndSwap
+	// CompareAndSwap
+	m, err = c.Gets([]string{"foo"})
+	if err != nil {
+		t.Fatalf("gets(foo): %v", err)
+	}
+	err = c.CompareAndSwap("foo", []byte("swapped"), m["foo"].CasID)
+	if err != nil {
+		t.Fatalf("cas(foo, swapped, casid): %v", err)
+	}
+	err = c.CompareAndSwap("foo", []byte("swapped"), m["foo"].CasID)
+	if err != ErrCasConflict {
+		t.Fatalf("cas(foo, swapped, casid) Error = %v, want %v", err, ErrCasConflict)
+	}
 
 	// Delete
 	err = c.Delete("foo", false)
 	if err != nil {
 		t.Fatalf("delete(foo): %v", err)
 	}
-	val, err = c.Get("foo")
+	_, err = c.Get("foo")
 	if err != ErrCacheMiss {
-		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", val)
+		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
 	}
 
 	// Increment
@@ -189,12 +205,12 @@ func TestLocalhost(t *testing.T) {
 	if num != 32 {
 		t.Fatalf("decr(foo, 10) Value = %q, want 32", num)
 	}
-	val, err = c.Get("foo")
+	response, err = c.Get("foo")
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if !bytes.Equal(val, []byte("32")) {
-		t.Fatalf("get(foo) Value = %q, want 32", val)
+	if !bytes.Equal(response.Value, []byte("32")) {
+		t.Fatalf("get(foo) Value = %q, want 32", response.Value)
 	}
 
 	// Touch
@@ -202,17 +218,17 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("touch(foo, 2): %v", err)
 	}
-	val, err = c.Get("foo")
+	response, err = c.Get("foo")
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if !bytes.Equal(val, []byte("32")) {
-		t.Fatalf("get(foo) Value = %q, want 32", val)
+	if !bytes.Equal(response.Value, []byte("32")) {
+		t.Fatalf("get(foo) Value = %q, want 32", response.Value)
 	}
 	time.Sleep(2 * time.Second)
-	val, err = c.Get("foo")
+	_, err = c.Get("foo")
 	if err != ErrCacheMiss {
-		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", val)
+		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
 	}
 
 	// Stats
@@ -233,9 +249,9 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("version(): %v", err)
 	}
-	val, err = c.Get("foo")
+	_, err = c.Get("foo")
 	if err != ErrCacheMiss {
-		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", val)
+		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
 	}
 
 	// Version
