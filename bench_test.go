@@ -24,7 +24,7 @@ func benchmarkSetGet(b *testing.B, c *Client) {
 		if err := c.Set(key, value); err != nil {
 			b.Fatal(err)
 		}
-		if _, err := c.Get(key); err != nil {
+		if _, _, err := c.Get(key); err != nil {
 			b.Fatal(err)
 		}
 	}

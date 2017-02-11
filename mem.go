@@ -162,31 +162,31 @@ func (c *Client) receiveGetPayload(size uint64) ([]byte, error) {
 	return buffer, nil
 }
 
-// Get returns a value, cas id, flags and error.
-func (c *Client) Get(key string) (*Response, error) {
-	err := c.sendRetrieveCommand("get", key)
+// Get returns a value, flags and error.
+func (c *Client) Get(key string) (value []byte, flags uint32, err error) {
+	err = c.sendRetrieveCommand("get", key)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	_, response, err := c.receiveGetResponse()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// Confirm END
 	endLine, isPrefix, err := c.rw.ReadLine()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if isPrefix {
-		return nil, errors.New("buffer is not enough")
+		return nil, 0, errors.New("buffer is not enough")
 	}
 	if !bytes.Equal(endLine, responseEnd) {
-		return nil, errors.New("Malformed response: currupt get result end")
+		return nil, 0, errors.New("Malformed response: currupt get result end")
 	}
 
-	return response, nil
+	return response.Value, response.Flags, nil
 }
 
 // Gets is an alternative get command for using with CAS.
