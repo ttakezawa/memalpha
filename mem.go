@@ -11,6 +11,13 @@ import (
 	"strings"
 )
 
+// ProtocolError describes a protocol violation.
+type ProtocolError string
+
+func (pe ProtocolError) Error() string {
+	return fmt.Sprintf("memcache: protocol error: %s", string(pe))
+}
+
 var (
 	// ErrCacheMiss means that a Get failed because the item wasn't present.
 	ErrCacheMiss = errors.New("memcache: cache miss")
@@ -123,7 +130,7 @@ func (c *Client) receiveGetResponse() (string, *Response, error) {
 	headerChunks := strings.Split(string(header), " ")
 	debugf("debug header: %+v\n", headerChunks) // output for debug
 	if len(headerChunks) < 4 {
-		return "", nil, fmt.Errorf("Malformed response: %#v", string(header))
+		return "", nil, ProtocolError(fmt.Sprintf("malformed response: %#v", string(header)))
 	}
 
 	response := &Response{}
@@ -169,7 +176,7 @@ func (c *Client) receiveGetPayload(size uint64) ([]byte, error) {
 
 	// Check \r\n
 	if !bytes.HasSuffix(buffer, bytesCrlf) {
-		return nil, errors.New("Malformed response: currupt get result end")
+		return nil, ProtocolError("malformed response: corrupt get result end")
 	}
 
 	return buffer, nil
@@ -193,7 +200,7 @@ func (c *Client) Get(key string) (value []byte, flags uint32, err error) {
 		return nil, 0, err
 	}
 	if !bytes.Equal(endLine, responseEnd) {
-		return nil, 0, errors.New("Malformed response: currupt get result end")
+		return nil, 0, ProtocolError("malformed response: corrupt get result end")
 	}
 
 	return response.Value, response.Flags, nil
@@ -282,7 +289,7 @@ func (c *Client) receiveReplyToStorageCommand() error {
 	case bytes.Equal(reply, replyNotFound):
 		return ErrNotFound
 	}
-	return errors.New(string(reply))
+	return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
 }
 
 func (c *Client) receiveReply() ([]byte, error) {
@@ -387,7 +394,7 @@ func (c *Client) Delete(key string, noreply bool) error {
 		case bytes.Equal(reply, replyNotFound):
 			return ErrNotFound
 		}
-		return errors.New(string(reply))
+		return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
 	}
 
 	return nil
@@ -493,7 +500,7 @@ func (c *Client) Touch(key string, exptime int32, noreply bool) error {
 			return ErrNotFound
 			// TODO: case ERROR, CLIENT_ERROR, SERVER_ERROR
 		}
-		return errors.New(string(reply))
+		return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
 	}
 
 	return nil
@@ -544,7 +551,7 @@ func (c *Client) stats(command []byte) (map[string]string, error) {
 			return m, nil
 		}
 		if !bytes.HasPrefix(line, []byte("STAT ")) {
-			return nil, errors.New("Malformed stats response")
+			return nil, ProtocolError("malformed stats response")
 		}
 
 		data := bytes.SplitN(line[5:], []byte(" "), 3)
@@ -593,7 +600,7 @@ func (c *Client) FlushAll(delay int, noreply bool) error {
 			return nil
 			// TODO: case ERROR, CLIENT_ERROR, SERVER_ERROR
 		}
-		return errors.New(string(reply))
+		return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
 	}
 
 	return nil
@@ -629,8 +636,7 @@ func (c *Client) Version() (string, error) {
 		return string(reply[8:]), nil
 	}
 
-	// TODO: error handling
-	return "", errors.New(string(reply))
+	return "", ProtocolError(fmt.Sprintf("malformed version response: %s", string(reply)))
 }
 
 // Quit closes the connection to memcached server
