@@ -12,4 +12,4 @@ matrix:
 
 script:
   - go test -race -v .
-  - go test -bench=.
+  - go test -run='$none' -bench=.
