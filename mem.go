@@ -67,6 +67,10 @@ func NewClient(addr string) *Client {
 }
 
 func (c *Client) ensureConnected() error {
+	if c.conn != nil {
+		return nil
+	}
+
 	conn, err := net.Dial("tcp", c.Addr)
 	if err != nil {
 		return err
