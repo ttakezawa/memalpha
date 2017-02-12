@@ -97,14 +97,23 @@ func (c *Client) sendRetrieveCommand(cmd string, key string) error {
 	return c.rw.Flush()
 }
 
+func (c *Client) readLine() ([]byte, error) {
+	var line, next []byte
+	var isPrefix bool = true
+	var err error = nil
+
+	for isPrefix && err == nil {
+		next, isPrefix, err = c.rw.ReadLine()
+		line = append(line, next...)
+	}
+	return line, err
+}
+
 // returns key, value, casId, flags, err
 func (c *Client) receiveGetResponse() (string, *Response, error) {
-	header, isPrefix, err := c.rw.ReadLine()
+	header, err := c.readLine()
 	if err != nil {
 		return "", nil, err
-	}
-	if isPrefix {
-		return "", nil, errors.New("buffer is not enough")
 	}
 	if bytes.Equal(header, responseEnd) {
 		return "", nil, ErrCacheMiss
@@ -179,12 +188,9 @@ func (c *Client) Get(key string) (value []byte, flags uint32, err error) {
 	}
 
 	// Confirm END
-	endLine, isPrefix, err := c.rw.ReadLine()
+	endLine, err := c.readLine()
 	if err != nil {
 		return nil, 0, err
-	}
-	if isPrefix {
-		return nil, 0, errors.New("buffer is not enough")
 	}
 	if !bytes.Equal(endLine, responseEnd) {
 		return nil, 0, errors.New("Malformed response: currupt get result end")
@@ -280,17 +286,7 @@ func (c *Client) receiveReplyToStorageCommand() error {
 }
 
 func (c *Client) receiveReply() ([]byte, error) {
-	reply, isPrefix, err := c.rw.ReadLine()
-	if err != nil {
-		return nil, err
-	}
-	if isPrefix {
-		return nil, errors.New("buffer is not enough")
-	}
-
-	debugf("Reply: %+v\n", string(reply)) // output for debug
-
-	return reply, nil
+	return c.readLine()
 }
 
 // Set key
@@ -540,12 +536,9 @@ func (c *Client) stats(command []byte) (map[string]string, error) {
 
 	m := make(map[string]string)
 	for {
-		line, isPrefix, err1 := c.rw.ReadLine()
+		line, err1 := c.readLine()
 		if err1 != nil {
 			return nil, err1
-		}
-		if isPrefix {
-			return nil, errors.New("buffer is not enough")
 		}
 		if bytes.Equal(line, responseEnd) {
 			return m, nil
