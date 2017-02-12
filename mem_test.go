@@ -89,6 +89,27 @@ func TestLocalhost(t *testing.T) {
 		t.Fatalf("get(foo) Value = %q, want fooval", value)
 	}
 
+	// Set large item
+	largeKey := string(bytes.Repeat([]byte("A"), 250))
+	largeValue := bytes.Repeat([]byte("A"), 1023*1024)
+	err = c.Set(largeKey, largeValue)
+	if err != nil {
+		t.Fatalf("set(largeKey): %v", err)
+	}
+
+	// Get large item
+	value, _, err = c.Get(largeKey)
+	if err != nil {
+		t.Fatalf("get(largeKey): %v", err)
+	}
+	if !bytes.Equal(value, largeValue) {
+		peekLen := len(value)
+		if peekLen > 10 {
+			peekLen = 10
+		}
+		t.Fatalf("get(largeKey) Value = %q, want fooval", value[:peekLen])
+	}
+
 	// Gets
 	err = c.Set("bar", []byte("barval"))
 	if err != nil {

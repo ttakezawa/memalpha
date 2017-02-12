@@ -6,9 +6,9 @@ import (
 )
 
 func BenchmarkGetSmall(b *testing.B) { benchmarkGet(b, 5, 5) }
-func BenchmarkGetLarge(b *testing.B) { benchmarkGet(b, 250, 500*1024) }
+func BenchmarkGetLarge(b *testing.B) { benchmarkGet(b, 250, 1023*1024) }
 func BenchmarkSetSmall(b *testing.B) { benchmarkSet(b, 5, 5) }
-func BenchmarkSetLarge(b *testing.B) { benchmarkSet(b, 250, 500*1024) }
+func BenchmarkSetLarge(b *testing.B) { benchmarkSet(b, 250, 1023*1024) }
 
 func benchmarkGet(b *testing.B, keySize int, valueSize int) {
 	key := string(bytes.Repeat([]byte("A"), keySize))
