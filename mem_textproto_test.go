@@ -70,6 +70,34 @@ func TestMalformedGetResponse(t *testing.T) {
 		}
 		assert.Condition(t, comparison, fmt.Sprintf("%q should have prefix %q", got, expected))
 	}
+
+	{
+		// Malformed CasID
+		c := newFakedClient("VALUE foo 0 6 foo\r\nfoobar\r\nEND", ioutil.Discard)
+		_, _, err := c.Get("foo")
+		assert.IsType(t, &strconv.NumError{}, err)
+	}
+
+	{
+		// Malformed body
+		c := newFakedClient("VALUE foo 0 4\r\nfoobar\r\nEND", ioutil.Discard)
+		_, _, err := c.Get("foo")
+		assert.IsType(t, ProtocolError(""), err)
+	}
+
+	{
+		// Get response misses "END"
+		c := newFakedClient("VALUE foo 0 6\r\nfoobar\r\nNOT_END", ioutil.Discard)
+		_, _, err := c.Get("foo")
+		assert.IsType(t, ProtocolError(""), err)
+	}
+
+	{
+		// Gets response missing "END"
+		c := newFakedClient("VALUE foo 0 6\r\nfoobar\r\nNOT_END", ioutil.Discard)
+		_, err := c.Gets([]string{"foo"})
+		assert.IsType(t, ProtocolError(""), err)
+	}
 }
 
 func TestMalformedStatsResponse(t *testing.T) {
