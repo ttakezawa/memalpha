@@ -18,7 +18,7 @@ func TestServerError(t *testing.T) {
 
 	c := &Client{rw: serverReadWriter}
 
-	err := c.Set("foo", []byte("bar"))
+	err := c.Set("foo", []byte("bar"), false)
 	e, ok := err.(ServerError)
 	if ok && strings.Contains(e.Error(), "server error: "+errorMessage) {
 		return
@@ -36,7 +36,7 @@ func TestClientError(t *testing.T) {
 
 	c := &Client{rw: serverReadWriter}
 
-	err := c.Set("foo", []byte("bar"))
+	err := c.Set("foo", []byte("bar"), false)
 	e, ok := err.(ClientError)
 	if ok && strings.Contains(e.Error(), "client error: "+errorMessage) {
 		return
@@ -53,7 +53,7 @@ func TestReplyError(t *testing.T) {
 
 	c := &Client{rw: serverReadWriter}
 
-	err := c.Set("foo", []byte("bar"))
+	err := c.Set("foo", []byte("bar"), false)
 	assert.Equal(t, err, ErrReplyError)
 }
 

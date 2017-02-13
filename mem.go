@@ -347,11 +347,9 @@ func (c *Client) sendStorageCommand(command string, key string, value []byte, fl
 }
 
 // Set key
-func (c *Client) Set(key string, value []byte) error {
+func (c *Client) Set(key string, value []byte, noreply bool) error {
 	var flags uint32
 	exptime := 0
-	noreply := false
-
 	return c.sendStorageCommand("set", key, value, flags, exptime, 0, noreply)
 }
 

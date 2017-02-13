@@ -75,7 +75,7 @@ func TestLocalhost(t *testing.T) {
 	c := memd.client
 
 	mustSet := func(key string, value []byte) {
-		err := c.Set(key, value)
+		err := c.Set(key, value, true)
 		assert.Nil(t, err)
 	}
 
@@ -86,11 +86,11 @@ func TestLocalhost(t *testing.T) {
 	}
 
 	// Set
-	err = c.Set("foo", []byte("fooval"))
+	err = c.Set("foo", []byte("fooval"), false)
 	if err != nil {
 		t.Fatalf("first set(foo): %v", err)
 	}
-	err = c.Set("foo", []byte("fooval"))
+	err = c.Set("foo", []byte("fooval"), false)
 	if err != nil {
 		t.Fatalf("second set(foo): %v", err)
 	}
@@ -107,7 +107,7 @@ func TestLocalhost(t *testing.T) {
 	// Set large item
 	largeKey := string(bytes.Repeat([]byte("A"), 250))
 	largeValue := bytes.Repeat([]byte("A"), 1023*1024)
-	err = c.Set(largeKey, largeValue)
+	err = c.Set(largeKey, largeValue, false)
 	if err != nil {
 		t.Fatalf("set(largeKey): %v", err)
 	}
@@ -128,7 +128,7 @@ func TestLocalhost(t *testing.T) {
 	// TODO: Set noreply
 
 	// Gets
-	err = c.Set("bar", []byte("barval"))
+	err = c.Set("bar", []byte("barval"), false)
 	if err != nil {
 		t.Fatalf("set(bar): %v", err)
 	}
@@ -157,10 +157,7 @@ func TestLocalhost(t *testing.T) {
 	// TODO: Add noreply
 
 	// Replace
-	err = c.Set("foo", []byte("fooval"))
-	if err != nil {
-		t.Fatalf("set(foo): %v", err)
-	}
+	mustSet("foo", []byte("fooval"))
 	err = c.Replace("foo", []byte("fooval2"))
 	if err != nil {
 		t.Fatalf("replace(foo): %v", err)
@@ -249,10 +246,7 @@ func TestLocalhost(t *testing.T) {
 	}
 
 	// Increment
-	err = c.Set("foo", []byte("35"))
-	if err != nil {
-		t.Fatalf("set(foo): %v", err)
-	}
+	mustSet("foo", []byte("35"))
 	num, err := c.Increment("foo", 7, false)
 	if err != nil {
 		t.Fatalf("incr(foo, 7): %v", err)
@@ -336,10 +330,7 @@ func TestLocalhost(t *testing.T) {
 	}
 
 	// FlushAll
-	err = c.Set("foo", []byte("bar"))
-	if err != nil {
-		t.Fatalf("set(foo): %v", err)
-	}
+	mustSet("foo", []byte("bar"))
 	err = c.FlushAll(0, false)
 	if err != nil {
 		t.Fatalf("version(): %v", err)

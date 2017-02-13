@@ -20,7 +20,7 @@ func benchmarkGet(b *testing.B, keySize int, valueSize int) {
 	}
 	defer memd.Shutdown()
 
-	if err := memd.client.Set(key, value); err != nil {
+	if err := memd.client.Set(key, value, false); err != nil {
 		b.Skipf("skipping test; couldn't set(%s, %s) = %+v", key, value, err)
 	}
 
@@ -44,14 +44,14 @@ func benchmarkSet(b *testing.B, keySize int, valueSize int) {
 	}
 	defer memd.Shutdown()
 
-	if err := memd.client.Set(key, value); err != nil {
+	if err := memd.client.Set(key, value, false); err != nil {
 		b.Skipf("skipping test; couldn't set(%s, %s) = %+v", key, value, err)
 	}
 
 	b.SetBytes(int64(keySize + valueSize))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := memd.client.Set(key, value); err != nil {
+		if err := memd.client.Set(key, value, false); err != nil {
 			b.Fatal(err)
 		}
 	}
