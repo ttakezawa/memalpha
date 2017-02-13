@@ -20,6 +20,12 @@ func (e errorWriter) Write(p []byte) (int, error) {
 	return 0, e.error
 }
 
+type errorReader struct{ error }
+
+func (e errorReader) Read(p []byte) (int, error) {
+	return 0, e.error
+}
+
 func newFakedClient(response string, requestWriter io.Writer) *Client {
 	return &Client{rw: bufio.NewReadWriter(
 		bufio.NewReader(bytes.NewReader([]byte(response))),
@@ -72,6 +78,17 @@ func TestMalformedGetResponse(t *testing.T) {
 	}
 
 	{
+		// Network Error by read
+		expected := net.UnknownNetworkError("test")
+		c := &Client{rw: bufio.NewReadWriter(
+			bufio.NewReader(errorReader{expected}),
+			bufio.NewWriter(ioutil.Discard),
+		)}
+		_, _, err := c.Get("foo")
+		assert.Equal(t, expected, err)
+	}
+
+	{
 		// Malformed CasID
 		c := newFakedClient("VALUE foo 0 6 foo\r\nfoobar\r\nEND", ioutil.Discard)
 		_, _, err := c.Get("foo")
@@ -98,6 +115,12 @@ func TestMalformedGetResponse(t *testing.T) {
 		_, err := c.Gets([]string{"foo"})
 		assert.IsType(t, ProtocolError(""), err)
 	}
+}
+
+func TestMalformedSetResponse(t *testing.T) {
+	c := newFakedClient("foobar", ioutil.Discard)
+	err := c.Set("foo", []byte("bar"), false)
+	assert.IsType(t, ProtocolError(fmt.Sprintf("unknown reply type: %s", string("foobar"))), err)
 }
 
 func TestMalformedStatsResponse(t *testing.T) {
