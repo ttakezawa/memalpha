@@ -252,6 +252,12 @@ func TestLocalhost(t *testing.T) {
 		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
 	}
 
+	// Touch raise ErrNotFound
+	err = c.Touch("not_exists", 10, false)
+	if err != ErrNotFound {
+		t.Fatalf("get(not_exists) Error = %q, want ErrNotFound", err)
+	}
+
 	// Stats
 	stats, err := c.Stats()
 	if err != nil {
