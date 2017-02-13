@@ -18,6 +18,34 @@ func (pe ProtocolError) Error() string {
 	return fmt.Sprintf("memcache: protocol error: %s", string(pe))
 }
 
+// ClientError means some sort of client error in the input line, i.e. the input doesn't
+// confirm to the protocol in some way.
+type ClientError string
+
+func (ce ClientError) Error() string {
+	return fmt.Sprintf("memcache: client error: %s", string(ce))
+}
+
+// ServerErro means some sort of server error prevents the server from carrying out the
+// command.
+type ServerError string
+
+func (se ServerError) Error() string {
+	return fmt.Sprintf("memcache: server error: %s", string(se))
+}
+
+func checkReply(reply []byte) error {
+	switch {
+	case bytes.Equal(reply, replyError):
+		return ErrReplyError
+	case bytes.HasPrefix(reply, replyClientErrorPrefix):
+		return ClientError(reply[len(replyClientErrorPrefix):])
+	case bytes.HasPrefix(reply, replyServerErrorPrefix):
+		return ServerError(reply[len(replyServerErrorPrefix):])
+	}
+	return nil
+}
+
 var (
 	// ErrCacheMiss means that a Get failed because the item wasn't present.
 	ErrCacheMiss = errors.New("memcache: cache miss")
@@ -32,16 +60,22 @@ var (
 	// ErrNotStored normally means that the condition for an "add" or a
 	// "replace" command wasn't met.
 	ErrNotStored = errors.New("memcache: item not stored")
+
+	// ErrReplyError means the client sent a nonexistent command name.
+	ErrReplyError = errors.New("memcache: nonexistent command name")
 )
 
 var (
-	replyStored    = []byte("STORED")
-	replyNotStored = []byte("NOT_STORED")
-	replyExists    = []byte("EXISTS")
-	replyNotFound  = []byte("NOT_FOUND")
-	replyDeleted   = []byte("DELETED")
-	replyTouched   = []byte("TOUCHED")
-	replyOk        = []byte("OK")
+	replyStored            = []byte("STORED")
+	replyNotStored         = []byte("NOT_STORED")
+	replyExists            = []byte("EXISTS")
+	replyNotFound          = []byte("NOT_FOUND")
+	replyDeleted           = []byte("DELETED")
+	replyTouched           = []byte("TOUCHED")
+	replyOk                = []byte("OK")
+	replyError             = []byte("ERROR")
+	replyClientErrorPrefix = []byte("CLIENT_ERROR ")
+	replyServerErrorPrefix = []byte("SERVER_ERROR ")
 )
 
 var (
@@ -289,6 +323,9 @@ func (c *Client) receiveReplyToStorageCommand() error {
 	case bytes.Equal(reply, replyNotFound):
 		return ErrNotFound
 	}
+	if err = checkReply(reply); err != nil {
+		return err
+	}
 	return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
 }
 
@@ -450,7 +487,9 @@ func (c *Client) executeIncrDecrCommand(command string, key string, value uint64
 		switch {
 		case bytes.Equal(reply, replyNotFound):
 			return 0, ErrNotFound
-			// TODO: case ERROR, CLIENT_ERROR, SERVER_ERROR
+		}
+		if err1 = checkReply(reply); err1 != nil {
+			return 0, err1
 		}
 		newValue, err1 := strconv.ParseUint(string(reply), 10, 64)
 		if err1 != nil {
