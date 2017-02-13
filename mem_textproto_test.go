@@ -55,7 +55,7 @@ func TestReplyError(t *testing.T) {
 	c := &Client{rw: serverReadWriter}
 
 	err := c.Set("foo", []byte("bar"), false)
-	assert.Equal(t, err, ErrReplyError)
+	assert.Equal(t, ErrReplyError, err)
 }
 
 func TestStatsProtocolError(t *testing.T) {
@@ -67,7 +67,7 @@ func TestStatsProtocolError(t *testing.T) {
 	c := &Client{rw: serverReadWriter}
 
 	_, err := c.Stats()
-	assert.Equal(t, err, ProtocolError("malformed stats response"))
+	assert.Equal(t, ProtocolError("malformed stats response"), err)
 }
 
 func TestIncrValueError(t *testing.T) {

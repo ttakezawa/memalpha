@@ -82,7 +82,7 @@ func TestLocalhost(t *testing.T) {
 	assertItem := func(key string, expected []byte) {
 		value, _, err := c.Get(key)
 		assert.Nil(t, err)
-		assert.Equal(t, value, expected)
+		assert.Equal(t, expected, value)
 	}
 
 	// Set
