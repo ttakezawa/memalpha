@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func freePort() (int, error) {
@@ -70,6 +72,17 @@ func TestLocalhost(t *testing.T) {
 
 	c := memd.client
 
+	mustSet := func(key string, value []byte) {
+		err := c.Set(key, value)
+		assert.Nil(t, err)
+	}
+
+	assertItem := func(key string, expected []byte) {
+		value, _, err := c.Get(key)
+		assert.Nil(t, err)
+		assert.Equal(t, value, expected)
+	}
+
 	// Set
 	err = c.Set("foo", []byte("fooval"))
 	if err != nil {
@@ -110,6 +123,8 @@ func TestLocalhost(t *testing.T) {
 		t.Fatalf("get(largeKey) Value = %q, want fooval", value[:peekLen])
 	}
 
+	// TODO: Set noreply
+
 	// Gets
 	err = c.Set("bar", []byte("barval"))
 	if err != nil {
@@ -137,6 +152,7 @@ func TestLocalhost(t *testing.T) {
 	if err != ErrNotStored {
 		t.Fatalf("second add(baz) Error = ErrNotStored, want %+v", err)
 	}
+	// TODO: Add noreply
 
 	// Replace
 	err = c.Set("foo", []byte("fooval"))
@@ -154,6 +170,7 @@ func TestLocalhost(t *testing.T) {
 	if !bytes.Equal(value, []byte("fooval2")) {
 		t.Fatalf("replace(foo, fooval2) then, get(foo) Value = %q, want fooval2", value)
 	}
+	// TODO: Replace noreply
 
 	// Append
 	err = c.Append("foo", []byte("suffix"))
@@ -167,6 +184,7 @@ func TestLocalhost(t *testing.T) {
 	if !bytes.Equal(value, []byte("fooval2suffix")) {
 		t.Fatalf("append(foo, suffix) then, get(foo) Value = %q, want fooval2suffix", value)
 	}
+	// TODO: Replace noreply
 
 	// Prepend
 	err = c.Prepend("foo", []byte("prefix"))
@@ -180,6 +198,7 @@ func TestLocalhost(t *testing.T) {
 	if !bytes.Equal(value, []byte("prefixfooval2suffix")) {
 		t.Fatalf("prepend(foo, prefix) then, get(foo) Value = %q, want prefixfooval2suffix", value)
 	}
+	// TODO: Prepend noreply
 
 	// CompareAndSwap
 	m, err = c.Gets([]string{"foo"})
@@ -194,6 +213,7 @@ func TestLocalhost(t *testing.T) {
 	if err != ErrCasConflict {
 		t.Fatalf("cas(foo, swapped, casid) Error = %v, want %v", err, ErrCasConflict)
 	}
+	// TODO: CompareAndSwap noreply
 
 	// CompareAndSwap raises ErrNotFound
 	err = c.CompareAndSwap("not_exists", []byte("ignored"), 42)
@@ -206,6 +226,15 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delete(foo): %v", err)
 	}
+	_, _, err = c.Get("foo")
+	if err != ErrCacheMiss {
+		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
+	}
+
+	// Delete noreply
+	mustSet("foo", []byte("exist"))
+	err = c.Delete("foo", true)
+	assert.Nil(t, err)
 	_, _, err = c.Get("foo")
 	if err != ErrCacheMiss {
 		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
@@ -230,6 +259,11 @@ func TestLocalhost(t *testing.T) {
 		t.Fatalf("incr(foo, 7) Value = %q, want 42", num)
 	}
 
+	// Increment noreply
+	num, err = c.Increment("foo", 2, true)
+	assert.Nil(t, err)
+	assertItem("foo", []byte("44"))
+
 	// Increment raises ErrNotFound
 	_, err = c.Increment("not_exists", 10, false)
 	if err != ErrNotFound {
@@ -237,19 +271,19 @@ func TestLocalhost(t *testing.T) {
 	}
 
 	// Decrement
-	num, err = c.Decrement("foo", 10, false)
+	num, err = c.Decrement("foo", 2, false)
 	if err != nil {
-		t.Fatalf("decr(foo, 10): %v", err)
+		t.Fatalf("decr(foo, 2): %v", err)
 	}
-	if num != 32 {
-		t.Fatalf("decr(foo, 10) Value = %q, want 32", num)
+	if num != 42 {
+		t.Fatalf("decr(foo, 2) Value = %q, want 42", num)
 	}
 	value, _, err = c.Get("foo")
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if !bytes.Equal(value, []byte("32")) {
-		t.Fatalf("get(foo) Value = %q, want 32", value)
+	if !bytes.Equal(value, []byte("42")) {
+		t.Fatalf("get(foo) Value = %q, want 42", value)
 	}
 
 	// Touch
@@ -261,14 +295,19 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get(foo): %v", err)
 	}
-	if !bytes.Equal(value, []byte("32")) {
-		t.Fatalf("get(foo) Value = %q, want 32", value)
+	if !bytes.Equal(value, []byte("42")) {
+		t.Fatalf("get(foo) Value = %q, want 42", value)
 	}
 	time.Sleep(2 * time.Second)
 	_, _, err = c.Get("foo")
 	if err != ErrCacheMiss {
 		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
 	}
+
+	// Touch noreply
+	mustSet("foo", []byte("val"))
+	err = c.Touch("foo", 2, true)
+	assert.Nil(t, err)
 
 	// Touch raises ErrNotFound
 	err = c.Touch("not_exists", 10, false)
@@ -307,6 +346,20 @@ func TestLocalhost(t *testing.T) {
 	if err != ErrCacheMiss {
 		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
 	}
+
+	// FlushAll delayed
+	mustSet("foo", []byte("val"))
+	err = c.FlushAll(1, false)
+	assert.Nil(t, err)
+	time.Sleep(1 * time.Second)
+	_, _, err = c.Get("foo")
+	if err != ErrCacheMiss {
+		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
+	}
+
+	// FlushAll noreply
+	err = c.FlushAll(0, true)
+	assert.Nil(t, err)
 
 	// Version
 	ver, err := c.Version()
