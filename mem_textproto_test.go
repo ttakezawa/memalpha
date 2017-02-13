@@ -56,3 +56,15 @@ func TestReplyError(t *testing.T) {
 	err := c.Set("foo", []byte("bar"))
 	assert.Equal(t, err, ErrReplyError)
 }
+
+func TestStatsProtocolError(t *testing.T) {
+	response := bytes.NewReader([]byte("foobar"))
+	request := bytes.NewBuffer([]byte{})
+
+	serverReadWriter := bufio.NewReadWriter(bufio.NewReader(response), bufio.NewWriter(request))
+
+	c := &Client{rw: serverReadWriter}
+
+	_, err := c.Stats()
+	assert.Equal(t, err, ProtocolError("malformed stats response"))
+}
