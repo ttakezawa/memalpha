@@ -48,7 +48,7 @@ func (s *server) Start() error {
 	// Wait a bit for the socket to appear.
 	for i := 0; i < 10; i++ {
 		s.client.ensureConnected()
-		err = s.client.flush()
+		err = s.client.Err()
 		if err == nil {
 			return nil
 		}
@@ -66,6 +66,7 @@ func (s *server) Shutdown() error {
 func TestLocalhost(t *testing.T) {
 	memd := newServer()
 	err := memd.Start()
+
 	if err != nil {
 		t.Skipf("skipping test; couldn't start memcached: %s", err)
 	}

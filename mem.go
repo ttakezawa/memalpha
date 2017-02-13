@@ -34,18 +34,6 @@ func (se ServerError) Error() string {
 	return fmt.Sprintf("memcache: server error: %s", string(se))
 }
 
-func checkReply(reply []byte) error {
-	switch {
-	case bytes.Equal(reply, replyError):
-		return ErrReplyError
-	case bytes.HasPrefix(reply, replyClientErrorPrefix):
-		return ClientError(reply[len(replyClientErrorPrefix):])
-	case bytes.HasPrefix(reply, replyServerErrorPrefix):
-		return ServerError(reply[len(replyServerErrorPrefix):])
-	}
-	return nil
-}
-
 var (
 	// ErrCacheMiss means that a Get failed because the item wasn't present.
 	ErrCacheMiss = errors.New("memcache: cache miss")
@@ -84,6 +72,7 @@ var (
 
 var (
 	bytesCrlf     = []byte("\r\n")
+	bytesVersion  = []byte("VERSION ")
 	optionNoreply = "noreply"
 )
 
@@ -127,9 +116,9 @@ func (c *Client) ensureConnected() {
 	c.rw = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 }
 
-func (c *Client) readLine() ([]byte, error) {
+func (c *Client) readLine() []byte {
 	if c.err != nil {
-		return nil, c.err
+		return nil
 	}
 
 	var line, next []byte
@@ -139,7 +128,7 @@ func (c *Client) readLine() ([]byte, error) {
 		next, isPrefix, c.err = c.rw.ReadLine()
 		line = append(line, next...)
 	}
-	return line, c.err
+	return line
 }
 
 func (c *Client) write(p []byte) {
@@ -149,33 +138,77 @@ func (c *Client) write(p []byte) {
 	_, c.err = c.rw.Write(p)
 }
 
-// flush invoke c.rw.Flush(). If c.err is set, it unset c.err and returns the err.
-func (c *Client) flush() error {
-	if c.err == nil {
-		return c.rw.Flush()
+func (c *Client) flush() {
+	if c.err != nil {
+		return
 	}
+	c.err = c.rw.Flush()
+}
 
+// Err results in clearing c.err
+func (c *Client) Err() error {
 	err := c.err
 	c.err = nil
 	return err
 }
 
+func (c *Client) receiveReply() []byte {
+	if c.err != nil {
+		return nil
+	}
+	return c.readLine()
+}
+
+func (c *Client) checkReply(reply []byte) (ok bool) {
+	if c.err != nil {
+		return false
+	}
+
+	switch {
+	case bytes.Equal(reply, replyStored), bytes.Equal(reply, replyDeleted), bytes.Equal(reply, replyTouched), bytes.Equal(reply, replyOk):
+		return true
+	case bytes.Equal(reply, replyExists):
+		c.err = ErrCasConflict
+	case bytes.Equal(reply, replyNotStored):
+		c.err = ErrNotStored
+	case bytes.Equal(reply, replyNotFound):
+		c.err = ErrNotFound
+	case bytes.Equal(reply, replyError):
+		c.err = ErrReplyError
+	case bytes.HasPrefix(reply, replyClientErrorPrefix):
+		c.err = ClientError(reply[len(replyClientErrorPrefix):])
+	case bytes.HasPrefix(reply, replyServerErrorPrefix):
+		c.err = ServerError(reply[len(replyServerErrorPrefix):])
+	}
+	return false
+}
+
+func (c *Client) receiveCheckReply() {
+	reply := c.receiveReply()
+	ok := c.checkReply(reply)
+
+	if c.err == nil && !ok {
+		c.err = ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
+	}
+}
+
 //// Retrieval commands
 
-func (c *Client) sendRetrieveCommand(cmd string, key string) error {
+func (c *Client) sendRetrieveCommand(cmd string, key string) {
 	c.ensureConnected()
 
 	c.write([]byte(fmt.Sprintf("%s %s\r\n", cmd, key)))
-	return c.flush()
+	c.flush()
 }
 
 // returns key, value, casId, flags, err
 func (c *Client) receiveGetResponse() (string, *Response, error) {
-	header, err := c.readLine()
-	if err != nil {
+	header := c.readLine()
+	if err := c.Err(); err != nil {
 		return "", nil, err
 	}
 	if bytes.Equal(header, responseEnd) {
+		c.err = ErrCacheMiss
 		return "", nil, ErrCacheMiss
 	}
 
@@ -237,19 +270,17 @@ func (c *Client) receiveGetPayload(size uint64) ([]byte, error) {
 
 // Get returns a value, flags and error.
 func (c *Client) Get(key string) (value []byte, flags uint32, err error) {
-	err = c.sendRetrieveCommand("get", key)
-	if err != nil {
-		return nil, 0, err
-	}
+	c.sendRetrieveCommand("get", key)
 
 	_, response, err := c.receiveGetResponse()
+	c.Err()
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// Confirm END
-	endLine, err := c.readLine()
-	if err != nil {
+	endLine := c.readLine()
+	if err = c.Err(); err != nil {
 		return nil, 0, err
 	}
 	if !bytes.Equal(endLine, responseEnd) {
@@ -261,19 +292,17 @@ func (c *Client) Get(key string) (value []byte, flags uint32, err error) {
 
 // Gets is an alternative get command for using with CAS.
 func (c *Client) Gets(keys []string) (map[string]*Response, error) {
-	err := c.sendRetrieveCommand("gets", strings.Join(keys, " "))
-	if err != nil {
-		return nil, err
-	}
+	c.sendRetrieveCommand("gets", strings.Join(keys, " "))
 
 	m := make(map[string]*Response)
 	for {
-		key, response, err1 := c.receiveGetResponse()
-		if err1 != nil {
-			if err1 == ErrCacheMiss {
+		key, response, err := c.receiveGetResponse()
+		c.Err()
+		if err != nil {
+			if err == ErrCacheMiss {
 				break
 			}
-			return nil, err1
+			return nil, err
 		}
 		m[key] = response
 	}
@@ -302,40 +331,13 @@ func (c *Client) sendStorageCommand(command string, key string, value []byte, fl
 	// Send data block: <data block>\r\n
 	c.write(value)
 	c.write(bytesCrlf)
-	if err := c.flush(); err != nil {
-		return err
+	c.flush()
+
+	if !noreply {
+		c.receiveCheckReply()
 	}
 
-	if noreply {
-		return nil
-	}
-
-	return c.receiveReplyToStorageCommand()
-}
-
-func (c *Client) receiveReplyToStorageCommand() error {
-	reply, err := c.receiveReply()
-	if err != nil {
-		return err
-	}
-	switch {
-	case bytes.Equal(reply, replyStored):
-		return nil
-	case bytes.Equal(reply, replyExists):
-		return ErrCasConflict
-	case bytes.Equal(reply, replyNotStored):
-		return ErrNotStored
-	case bytes.Equal(reply, replyNotFound):
-		return ErrNotFound
-	}
-	if err = checkReply(reply); err != nil {
-		return err
-	}
-	return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
-}
-
-func (c *Client) receiveReply() ([]byte, error) {
-	return c.readLine()
+	return c.Err()
 }
 
 // Set key
@@ -344,8 +346,7 @@ func (c *Client) Set(key string, value []byte) error {
 	exptime := 0
 	noreply := false
 
-	err := c.sendStorageCommand("set", key, value, flags, exptime, 0, noreply)
-	return err
+	return c.sendStorageCommand("set", key, value, flags, exptime, 0, noreply)
 }
 
 // Add key
@@ -354,8 +355,7 @@ func (c *Client) Add(key string, value []byte) error {
 	exptime := 0
 	noreply := false
 
-	err := c.sendStorageCommand("add", key, value, flags, exptime, 0, noreply)
-	return err
+	return c.sendStorageCommand("add", key, value, flags, exptime, 0, noreply)
 }
 
 // Replace key
@@ -364,8 +364,7 @@ func (c *Client) Replace(key string, value []byte) error {
 	exptime := 0
 	noreply := false
 
-	err := c.sendStorageCommand("replace", key, value, flags, exptime, 0, noreply)
-	return err
+	return c.sendStorageCommand("replace", key, value, flags, exptime, 0, noreply)
 }
 
 // Append key
@@ -374,8 +373,7 @@ func (c *Client) Append(key string, value []byte) error {
 	exptime := 0
 	noreply := false
 
-	err := c.sendStorageCommand("append", key, value, flags, exptime, 0, noreply)
-	return err
+	return c.sendStorageCommand("append", key, value, flags, exptime, 0, noreply)
 }
 
 // Prepend key
@@ -384,8 +382,7 @@ func (c *Client) Prepend(key string, value []byte) error {
 	exptime := 0
 	noreply := false
 
-	err := c.sendStorageCommand("prepend", key, value, flags, exptime, 0, noreply)
-	return err
+	return c.sendStorageCommand("prepend", key, value, flags, exptime, 0, noreply)
 }
 
 // CompareAndSwap is a check and set operation which means "store this data but only if no
@@ -395,8 +392,7 @@ func (c *Client) CompareAndSwap(key string, value []byte, casid uint64) error {
 	exptime := 0
 	noreply := false
 
-	err := c.sendStorageCommand("cas", key, value, flags, exptime, casid, noreply)
-	return err
+	return c.sendStorageCommand("cas", key, value, flags, exptime, casid, noreply)
 }
 
 //// Deletion
@@ -414,22 +410,12 @@ func (c *Client) Delete(key string, noreply bool) error {
 	c.write([]byte(fmt.Sprintf("delete %s %s\r\n", key, option)))
 	c.flush()
 
-	if noreply {
-		return nil
+	if !noreply {
+		// Receive reply
+		c.receiveCheckReply()
 	}
 
-	// Receive reply
-	reply, err1 := c.receiveReply()
-	if err1 != nil {
-		return err1
-	}
-	switch {
-	case bytes.Equal(reply, replyDeleted):
-		return nil
-	case bytes.Equal(reply, replyNotFound):
-		return ErrNotFound
-	}
-	return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
+	return c.Err()
 }
 
 //// Increment/Decrement
@@ -464,24 +450,20 @@ func (c *Client) executeIncrDecrCommand(command string, key string, value uint64
 	c.flush()
 
 	if noreply {
-		return 0, nil
+		return 0, c.Err()
 	}
 
 	// Receive reply
-	reply, err1 := c.receiveReply()
-	if err1 != nil {
-		return 0, err1
+	reply := c.receiveReply()
+	c.checkReply(reply)
+	if err := c.Err(); err != nil {
+		return 0, err
 	}
-	switch {
-	case bytes.Equal(reply, replyNotFound):
-		return 0, ErrNotFound
-	}
-	if err1 = checkReply(reply); err1 != nil {
-		return 0, err1
-	}
-	newValue, err1 := strconv.ParseUint(string(reply), 10, 64)
-	if err1 != nil {
-		return 0, err1
+
+	// Calculate a new value from reply.
+	newValue, err := strconv.ParseUint(string(reply), 10, 64)
+	if err != nil {
+		return 0, err
 	}
 	return newValue, nil
 }
@@ -502,22 +484,12 @@ func (c *Client) Touch(key string, exptime int32, noreply bool) error {
 	c.flush()
 
 	if noreply {
-		return nil
+		return c.Err()
 	}
 
 	// Recieve reply
-	reply, err1 := c.receiveReply()
-	if err1 != nil {
-		return err1
-	}
-	switch {
-	case bytes.Equal(reply, replyTouched):
-		return nil
-	case bytes.Equal(reply, replyNotFound):
-		return ErrNotFound
-		// TODO: case ERROR, CLIENT_ERROR, SERVER_ERROR
-	}
-	return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
+	c.receiveCheckReply()
+	return c.Err()
 }
 
 //// Slabs Reassign (Not Impl)
@@ -547,9 +519,9 @@ func (c *Client) stats(command []byte) (map[string]string, error) {
 
 	m := make(map[string]string)
 	for {
-		line, err1 := c.readLine()
-		if err1 != nil {
-			return nil, err1
+		line := c.readLine()
+		if err := c.Err(); err != nil {
+			return nil, err
 		}
 		if bytes.Equal(line, responseEnd) {
 			return m, nil
@@ -584,20 +556,12 @@ func (c *Client) FlushAll(delay int, noreply bool) error {
 	c.flush()
 
 	if noreply {
-		return nil
+		return c.Err()
 	}
 
 	// Recieve reply
-	reply, err1 := c.receiveReply()
-	if err1 != nil {
-		return err1
-	}
-	switch {
-	case bytes.Equal(reply, replyOk):
-		return nil
-		// TODO: case ERROR, CLIENT_ERROR, SERVER_ERROR
-	}
-	return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
+	c.receiveCheckReply()
+	return c.Err()
 }
 
 // Version returns the version of memcached server
@@ -610,17 +574,17 @@ func (c *Client) Version() (string, error) {
 	c.flush()
 
 	// Receive reply
-	reply, err1 := c.receiveReply()
-	if err1 != nil {
-		return "", err1
+	reply := c.receiveReply()
+	c.checkReply(reply)
+	if err := c.Err(); err != nil {
+		return "", err
 	}
 
-	if bytes.HasPrefix(reply, []byte("VERSION ")) {
+	if bytes.HasPrefix(reply, bytesVersion) {
 		// "VERSION " is 8 chars.
-		return string(reply[8:]), nil
+		return string(reply[len(bytesVersion):]), nil
 	}
-
-	return "", ProtocolError(fmt.Sprintf("malformed version response: %s", string(reply)))
+	return "", ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
 }
 
 // Quit closes the connection to memcached server
@@ -630,5 +594,6 @@ func (c *Client) Quit() error {
 	// quit\r\n
 	// NOTE: noreply option is not allowed.
 	c.write([]byte("quit\r\n"))
-	return c.flush()
+	c.flush()
+	return c.Err()
 }
