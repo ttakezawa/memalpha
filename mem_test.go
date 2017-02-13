@@ -205,10 +205,10 @@ func TestLocalhost(t *testing.T) {
 		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
 	}
 
-	// Touch raise ErrNotFound
-	err = c.Touch("not_exists", 10, false)
+	// Delete raises ErrNotFound
+	err = c.Delete("not_exists", false)
 	if err != ErrNotFound {
-		t.Fatalf("get(not_exists) Error = %q, want ErrNotFound", err)
+		t.Fatalf("delete(not_exists) Error = %q, want ErrNotFound", err)
 	}
 
 	// Increment
@@ -222,6 +222,12 @@ func TestLocalhost(t *testing.T) {
 	}
 	if num != 42 {
 		t.Fatalf("incr(foo, 7) Value = %q, want 42", num)
+	}
+
+	// Increment raises ErrNotFound
+	_, err = c.Increment("not_exists", 10, false)
+	if err != ErrNotFound {
+		t.Fatalf("incr(not_exists) Error = %q, want ErrNotFound", err)
 	}
 
 	// Decrement
@@ -258,10 +264,10 @@ func TestLocalhost(t *testing.T) {
 		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
 	}
 
-	// Touch raise ErrNotFound
+	// Touch raises ErrNotFound
 	err = c.Touch("not_exists", 10, false)
 	if err != ErrNotFound {
-		t.Fatalf("get(not_exists) Error = %q, want ErrNotFound", err)
+		t.Fatalf("touch(not_exists) Error = %q, want ErrNotFound", err)
 	}
 
 	// Stats
