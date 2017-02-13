@@ -11,5 +11,8 @@ matrix:
     - go: tip
 
 script:
-  - go test -race -v .
+  - go test -race -coverprofile=coverage.txt -covermode=atomic .
   - go test -run='$none' -bench=.
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
