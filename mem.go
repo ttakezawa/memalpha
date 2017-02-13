@@ -202,57 +202,68 @@ func (c *Client) sendRetrieveCommand(cmd string, key string) {
 }
 
 // returns key, value, casId, flags, err
-func (c *Client) receiveGetResponse() (string, *Response, error) {
+func (c *Client) receiveGetResponse() (string, *Response) {
 	header := c.readLine()
-	if err := c.Err(); err != nil {
-		return "", nil, err
+	if c.err != nil {
+		return "", nil
 	}
 	if bytes.Equal(header, responseEnd) {
 		c.err = ErrCacheMiss
-		return "", nil, ErrCacheMiss
+		return "", nil
 	}
 
+	response := &Response{}
+	key, size, err := c.parseGetResponseHeader(header, response)
+	if err != nil {
+		c.err = err
+		return "", nil
+	}
+
+	body, err := c.receiveGetResponseBody(size)
+	if err != nil {
+		c.err = err
+		return "", nil
+	}
+	response.Value = body[:size]
+
+	return key, response
+}
+
+func (c *Client) parseGetResponseHeader(header []byte, response *Response) (key string, size uint64, err error) {
 	// VALUE <key> <flags> <bytes> [<cas unique>]\r\n
 	headerChunks := strings.Split(string(header), " ")
 	debugf("debug header: %+v\n", headerChunks) // output for debug
 	if len(headerChunks) < 4 {
-		return "", nil, ProtocolError(fmt.Sprintf("malformed response: %#v", string(header)))
+		return "", 0, ProtocolError(fmt.Sprintf("malformed response: %#v", string(header)))
 	}
 
-	response := &Response{}
-	key := headerChunks[1]
+	key = headerChunks[1]
 
 	flags, err := strconv.ParseUint(headerChunks[2], 10, 32)
 	debugf("debug flags: %+v\n", flags) // output for debug
 	if err != nil {
-		return "", nil, err
+		return "", 0, err
 	}
 	response.Flags = uint32(flags)
 
-	size, err := strconv.ParseUint(headerChunks[3], 10, 64)
+	size, err = strconv.ParseUint(headerChunks[3], 10, 64)
 	debugf("debug size: %+v\n", size) // output for debug
 	if err != nil {
-		return "", nil, err
+		return "", 0, err
 	}
 
 	if len(headerChunks) == 5 {
 		response.CasID, err = strconv.ParseUint(headerChunks[4], 10, 64)
 		debugf("debug cas: %+v\n", response.CasID) // output for debug
 		if err != nil {
-			return "", nil, err
+			return "", 0, err
 		}
 	}
 
-	payload, err := c.receiveGetPayload(size)
-	if err != nil {
-		return "", nil, err
-	}
-
-	response.Value = payload[:size]
-	return key, response, nil
+	return key, size, nil
 }
 
-func (c *Client) receiveGetPayload(size uint64) ([]byte, error) {
+func (c *Client) receiveGetResponseBody(size uint64) ([]byte, error) {
 	buffer := make([]byte, size+2)
 	n, err := io.ReadFull(c.rw, buffer)
 	debugf("debug n: %+v\n", n) // output for debug
@@ -272,11 +283,7 @@ func (c *Client) receiveGetPayload(size uint64) ([]byte, error) {
 func (c *Client) Get(key string) (value []byte, flags uint32, err error) {
 	c.sendRetrieveCommand("get", key)
 
-	_, response, err := c.receiveGetResponse()
-	c.Err()
-	if err != nil {
-		return nil, 0, err
-	}
+	_, response := c.receiveGetResponse()
 
 	// Confirm END
 	endLine := c.readLine()
@@ -296,9 +303,8 @@ func (c *Client) Gets(keys []string) (map[string]*Response, error) {
 
 	m := make(map[string]*Response)
 	for {
-		key, response, err := c.receiveGetResponse()
-		c.Err()
-		if err != nil {
+		key, response := c.receiveGetResponse()
+		if err := c.Err(); err != nil {
 			if err == ErrCacheMiss {
 				break
 			}
