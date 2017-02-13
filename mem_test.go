@@ -350,6 +350,10 @@ func TestLocalhost(t *testing.T) {
 		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
 	}
 
+	// FlushAll non optional delayed
+	err = c.FlushAll(-1, false)
+	assert.Nil(t, err)
+
 	// FlushAll noreply
 	err = c.FlushAll(0, true)
 	assert.Nil(t, err)

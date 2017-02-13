@@ -82,3 +82,14 @@ func TestIncrValueError(t *testing.T) {
 	_, err = c.Increment("foo", 1, false)
 	assert.IsType(t, &strconv.NumError{}, err)
 }
+
+func TestIllegalVersionResponse(t *testing.T) {
+	response := bytes.NewReader([]byte("Illegal Ver 1"))
+	request := bytes.NewBuffer([]byte{})
+	serverReadWriter := bufio.NewReadWriter(bufio.NewReader(response), bufio.NewWriter(request))
+
+	c := &Client{rw: serverReadWriter}
+
+	_, err := c.Version()
+	assert.IsType(t, ProtocolError(""), err)
+}
