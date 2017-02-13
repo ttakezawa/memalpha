@@ -10,14 +10,20 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestServerError(t *testing.T) {
-	errorMessage := "test fake"
-	response := bytes.NewReader([]byte("SERVER_ERROR " + errorMessage))
+func fakedClient(response []byte) *Client {
 	request := bytes.NewBuffer([]byte{})
 
-	serverReadWriter := bufio.NewReadWriter(bufio.NewReader(response), bufio.NewWriter(request))
+	serverReadWriter := bufio.NewReadWriter(
+		bufio.NewReader(bytes.NewReader(response)),
+		bufio.NewWriter(request),
+	)
 
-	c := &Client{rw: serverReadWriter}
+	return &Client{rw: serverReadWriter}
+}
+
+func TestServerError(t *testing.T) {
+	errorMessage := "test fake"
+	c := fakedClient([]byte("SERVER_ERROR " + errorMessage))
 
 	err := c.Set("foo", []byte("bar"), false)
 	e, ok := err.(ServerError)
@@ -30,12 +36,7 @@ func TestServerError(t *testing.T) {
 
 func TestClientError(t *testing.T) {
 	errorMessage := "test fake"
-	response := bytes.NewReader([]byte("CLIENT_ERROR " + errorMessage))
-	request := bytes.NewBuffer([]byte{})
-
-	serverReadWriter := bufio.NewReadWriter(bufio.NewReader(response), bufio.NewWriter(request))
-
-	c := &Client{rw: serverReadWriter}
+	c := fakedClient([]byte("CLIENT_ERROR " + errorMessage))
 
 	err := c.Set("foo", []byte("bar"), false)
 	e, ok := err.(ClientError)
@@ -47,36 +48,21 @@ func TestClientError(t *testing.T) {
 }
 
 func TestReplyError(t *testing.T) {
-	response := bytes.NewReader([]byte("ERROR"))
-	request := bytes.NewBuffer([]byte{})
-
-	serverReadWriter := bufio.NewReadWriter(bufio.NewReader(response), bufio.NewWriter(request))
-
-	c := &Client{rw: serverReadWriter}
+	c := fakedClient([]byte("ERROR"))
 
 	err := c.Set("foo", []byte("bar"), false)
 	assert.Equal(t, ErrReplyError, err)
 }
 
 func TestStatsProtocolError(t *testing.T) {
-	response := bytes.NewReader([]byte("foobar"))
-	request := bytes.NewBuffer([]byte{})
-
-	serverReadWriter := bufio.NewReadWriter(bufio.NewReader(response), bufio.NewWriter(request))
-
-	c := &Client{rw: serverReadWriter}
+	c := fakedClient([]byte("foobar"))
 
 	_, err := c.Stats()
 	assert.Equal(t, ProtocolError("malformed stats response"), err)
 }
 
 func TestIncrValueError(t *testing.T) {
-	response := bytes.NewReader([]byte("foobar"))
-	request := bytes.NewBuffer([]byte{})
-
-	serverReadWriter := bufio.NewReadWriter(bufio.NewReader(response), bufio.NewWriter(request))
-
-	c := &Client{rw: serverReadWriter}
+	c := fakedClient([]byte("foobar"))
 
 	err := c.Set("foo", []byte("42"), true)
 	_, err = c.Increment("foo", 1, false)
@@ -84,11 +70,7 @@ func TestIncrValueError(t *testing.T) {
 }
 
 func TestIllegalVersionResponse(t *testing.T) {
-	response := bytes.NewReader([]byte("Illegal Ver 1"))
-	request := bytes.NewBuffer([]byte{})
-	serverReadWriter := bufio.NewReadWriter(bufio.NewReader(response), bufio.NewWriter(request))
-
-	c := &Client{rw: serverReadWriter}
+	c := fakedClient([]byte("Illegal Ver 1"))
 
 	_, err := c.Version()
 	assert.IsType(t, ProtocolError(""), err)
