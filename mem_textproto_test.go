@@ -3,6 +3,7 @@ package memalpha
 import (
 	"bufio"
 	"bytes"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -67,4 +68,17 @@ func TestStatsProtocolError(t *testing.T) {
 
 	_, err := c.Stats()
 	assert.Equal(t, err, ProtocolError("malformed stats response"))
+}
+
+func TestIncrValueError(t *testing.T) {
+	response := bytes.NewReader([]byte("foobar"))
+	request := bytes.NewBuffer([]byte{})
+
+	serverReadWriter := bufio.NewReadWriter(bufio.NewReader(response), bufio.NewWriter(request))
+
+	c := &Client{rw: serverReadWriter}
+
+	err := c.Set("foo", []byte("42"), true)
+	_, err = c.Increment("foo", 1, false)
+	assert.IsType(t, &strconv.NumError{}, err)
 }
