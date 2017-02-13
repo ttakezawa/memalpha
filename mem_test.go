@@ -261,6 +261,15 @@ func TestLocalhost(t *testing.T) {
 		t.Fatalf("stats(): len(Value) = %q, want len(value) > 2", stats)
 	}
 
+	// StatsArg
+	stats, err = c.StatsArg("slabs")
+	if err != nil {
+		t.Fatalf("stats(): %v", err)
+	}
+	if len(stats) < 2 {
+		t.Fatalf("stats(): len(Value) = %q, want len(value) > 2", stats)
+	}
+
 	// FlushAll
 	err = c.Set("foo", []byte("bar"))
 	if err != nil {
