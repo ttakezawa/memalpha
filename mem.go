@@ -26,7 +26,7 @@ func (ce ClientError) Error() string {
 	return fmt.Sprintf("memcache: client error: %s", string(ce))
 }
 
-// ServerErro means some sort of server error prevents the server from carrying out the
+// ServerError means some sort of server error prevents the server from carrying out the
 // command.
 type ServerError string
 
@@ -140,8 +140,8 @@ func (c *Client) sendRetrieveCommand(cmd string, key string) error {
 
 func (c *Client) readLine() ([]byte, error) {
 	var line, next []byte
-	var isPrefix bool = true
-	var err error = nil
+	var isPrefix = true
+	var err error
 
 	for isPrefix && err == nil {
 		next, isPrefix, err = c.rw.ReadLine()
