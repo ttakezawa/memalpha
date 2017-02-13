@@ -3,6 +3,8 @@ package memalpha
 import (
 	"bufio"
 	"bytes"
+	"io"
+	"io/ioutil"
 	"strconv"
 	"strings"
 	"testing"
@@ -10,20 +12,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func fakedClient(response []byte) *Client {
-	request := bytes.NewBuffer([]byte{})
-
-	serverReadWriter := bufio.NewReadWriter(
-		bufio.NewReader(bytes.NewReader(response)),
-		bufio.NewWriter(request),
-	)
-
-	return &Client{rw: serverReadWriter}
+func newFakedClient(response string, requestWriter io.Writer) *Client {
+	return &Client{rw: bufio.NewReadWriter(
+		bufio.NewReader(bytes.NewReader([]byte(response))),
+		bufio.NewWriter(requestWriter),
+	)}
 }
 
 func TestServerError(t *testing.T) {
 	errorMessage := "test fake"
-	c := fakedClient([]byte("SERVER_ERROR " + errorMessage))
+	c := newFakedClient("SERVER_ERROR "+errorMessage, ioutil.Discard)
 
 	err := c.Set("foo", []byte("bar"), false)
 	e, ok := err.(ServerError)
@@ -36,7 +34,7 @@ func TestServerError(t *testing.T) {
 
 func TestClientError(t *testing.T) {
 	errorMessage := "test fake"
-	c := fakedClient([]byte("CLIENT_ERROR " + errorMessage))
+	c := newFakedClient("CLIENT_ERROR "+errorMessage, ioutil.Discard)
 
 	err := c.Set("foo", []byte("bar"), false)
 	e, ok := err.(ClientError)
@@ -48,30 +46,37 @@ func TestClientError(t *testing.T) {
 }
 
 func TestReplyError(t *testing.T) {
-	c := fakedClient([]byte("ERROR"))
-
+	c := newFakedClient("ERROR", ioutil.Discard)
 	err := c.Set("foo", []byte("bar"), false)
 	assert.Equal(t, ErrReplyError, err)
 }
 
-func TestStatsProtocolError(t *testing.T) {
-	c := fakedClient([]byte("foobar"))
-
-	_, err := c.Stats()
-	assert.Equal(t, ProtocolError("malformed stats response"), err)
+func TestMalformedStatsResponse(t *testing.T) {
+	{
+		c := newFakedClient("foobar", ioutil.Discard)
+		_, err := c.Stats()
+		assert.Equal(t, ProtocolError("malformed stats response"), err)
+	}
 }
 
 func TestIncrValueError(t *testing.T) {
-	c := fakedClient([]byte("foobar"))
+	c := newFakedClient("foobar", ioutil.Discard)
 
 	err := c.Set("foo", []byte("42"), true)
 	_, err = c.Increment("foo", 1, false)
 	assert.IsType(t, &strconv.NumError{}, err)
 }
 
-func TestIllegalVersionResponse(t *testing.T) {
-	c := fakedClient([]byte("Illegal Ver 1"))
+func TestMalformedVersionResponse(t *testing.T) {
+	{
+		c := newFakedClient("Malformed Ver 1", ioutil.Discard)
+		_, err := c.Version()
+		assert.IsType(t, ProtocolError(""), err)
+	}
 
-	_, err := c.Version()
-	assert.IsType(t, ProtocolError(""), err)
+	{
+		c := newFakedClient("ERROR", ioutil.Discard)
+		_, err := c.Version()
+		assert.Equal(t, ErrReplyError, err)
+	}
 }
