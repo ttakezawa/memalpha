@@ -92,6 +92,7 @@ type Client struct {
 	Addr string
 	conn net.Conn
 	rw   *bufio.ReadWriter
+	err  error
 }
 
 // Response is a response of get
@@ -107,47 +108,65 @@ func NewClient(addr string) *Client {
 	return client
 }
 
-func (c *Client) ensureConnected() error {
+func (c *Client) ensureConnected() {
+	if c.err != nil {
+		return
+	}
+
 	if c.rw != nil {
-		return nil
+		return
 	}
 
 	conn, err := net.Dial("tcp", c.Addr)
 	if err != nil {
-		return err
+		c.err = err
+		return
 	}
 
 	c.conn = conn
 	c.rw = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
-	return nil
+}
+
+func (c *Client) readLine() ([]byte, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
+
+	var line, next []byte
+	var isPrefix = true
+
+	for isPrefix && c.err == nil {
+		next, isPrefix, c.err = c.rw.ReadLine()
+		line = append(line, next...)
+	}
+	return line, c.err
+}
+
+func (c *Client) write(p []byte) {
+	if c.err != nil {
+		return
+	}
+	_, c.err = c.rw.Write(p)
+}
+
+// flush invoke c.rw.Flush(). If c.err is set, it unset c.err and returns the err.
+func (c *Client) flush() error {
+	if c.err == nil {
+		return c.rw.Flush()
+	}
+
+	err := c.err
+	c.err = nil
+	return err
 }
 
 //// Retrieval commands
 
 func (c *Client) sendRetrieveCommand(cmd string, key string) error {
-	err := c.ensureConnected()
-	if err != nil {
-		return err
-	}
+	c.ensureConnected()
 
-	_, err = c.rw.Write([]byte(fmt.Sprintf("%s %s\r\n", cmd, key)))
-	if err != nil {
-		return err
-	}
-
-	return c.rw.Flush()
-}
-
-func (c *Client) readLine() ([]byte, error) {
-	var line, next []byte
-	var isPrefix = true
-	var err error
-
-	for isPrefix && err == nil {
-		next, isPrefix, err = c.rw.ReadLine()
-		line = append(line, next...)
-	}
-	return line, err
+	c.write([]byte(fmt.Sprintf("%s %s\r\n", cmd, key)))
+	return c.flush()
 }
 
 // returns key, value, casId, flags, err
@@ -265,10 +284,7 @@ func (c *Client) Gets(keys []string) (map[string]*Response, error) {
 //// Storage commands
 
 func (c *Client) sendStorageCommand(command string, key string, value []byte, flags uint32, exptime int, casid uint64, noreply bool) error {
-	err := c.ensureConnected()
-	if err != nil {
-		return err
-	}
+	c.ensureConnected()
 
 	option := ""
 	if noreply {
@@ -277,27 +293,16 @@ func (c *Client) sendStorageCommand(command string, key string, value []byte, fl
 
 	if command == "cas" {
 		// Send command: cas       <key> <flags> <exptime> <bytes> <cas unique> [noreply]\r\n
-		_, err = c.rw.Write([]byte(fmt.Sprintf("%s %s %d %d %d %d %s\r\n", command, key, flags, exptime, len(value), casid, option)))
+		c.write([]byte(fmt.Sprintf("%s %s %d %d %d %d %s\r\n", command, key, flags, exptime, len(value), casid, option)))
 	} else {
 		// Send command: <command> <key> <flags> <exptime> <bytes> [noreply]\r\n
-		_, err = c.rw.Write([]byte(fmt.Sprintf("%s %s %d %d %d %s\r\n", command, key, flags, exptime, len(value), option)))
-	}
-	if err != nil {
-		return err
+		c.write([]byte(fmt.Sprintf("%s %s %d %d %d %s\r\n", command, key, flags, exptime, len(value), option)))
 	}
 
 	// Send data block: <data block>\r\n
-	_, err = c.rw.Write(value)
-	if err != nil {
-		return err
-	}
-	_, err = c.rw.Write(bytesCrlf)
-	if err != nil {
-		return err
-	}
-
-	err = c.rw.Flush()
-	if err != nil {
+	c.write(value)
+	c.write(bytesCrlf)
+	if err := c.flush(); err != nil {
 		return err
 	}
 
@@ -398,10 +403,7 @@ func (c *Client) CompareAndSwap(key string, value []byte, casid uint64) error {
 
 // Delete deletes the item with the provided key
 func (c *Client) Delete(key string, noreply bool) error {
-	err := c.ensureConnected()
-	if err != nil {
-		return err
-	}
+	c.ensureConnected()
 
 	option := ""
 	if noreply {
@@ -409,15 +411,8 @@ func (c *Client) Delete(key string, noreply bool) error {
 	}
 
 	// delete <key> [noreply]\r\n
-	_, err = c.rw.Write([]byte(fmt.Sprintf("delete %s %s\r\n", key, option)))
-	if err != nil {
-		return err
-	}
-
-	err = c.rw.Flush()
-	if err != nil {
-		return err
-	}
+	c.write([]byte(fmt.Sprintf("delete %s %s\r\n", key, option)))
+	c.flush()
 
 	if noreply {
 		return nil
@@ -457,10 +452,7 @@ func (c *Client) Decrement(key string, value uint64, noreply bool) (uint64, erro
 }
 
 func (c *Client) executeIncrDecrCommand(command string, key string, value uint64, noreply bool) (uint64, error) {
-	err := c.ensureConnected()
-	if err != nil {
-		return 0, err
-	}
+	c.ensureConnected()
 
 	option := ""
 	if noreply {
@@ -468,15 +460,8 @@ func (c *Client) executeIncrDecrCommand(command string, key string, value uint64
 	}
 
 	// <incr|decr> <key> <value> [noreply]\r\n
-	_, err = c.rw.Write([]byte(fmt.Sprintf("%s %s %d %s\r\n", command, key, value, option)))
-	if err != nil {
-		return 0, err
-	}
-
-	err = c.rw.Flush()
-	if err != nil {
-		return 0, err
-	}
+	c.write([]byte(fmt.Sprintf("%s %s %d %s\r\n", command, key, value, option)))
+	c.flush()
 
 	if noreply {
 		return 0, nil
@@ -505,10 +490,7 @@ func (c *Client) executeIncrDecrCommand(command string, key string, value uint64
 
 // Touch is used to update the expiration time of an existing item without fetching it.
 func (c *Client) Touch(key string, exptime int32, noreply bool) error {
-	err := c.ensureConnected()
-	if err != nil {
-		return err
-	}
+	c.ensureConnected()
 
 	option := ""
 	if noreply {
@@ -516,15 +498,8 @@ func (c *Client) Touch(key string, exptime int32, noreply bool) error {
 	}
 
 	// touch <key> <exptime> [noreply]\r\n
-	_, err = c.rw.Write([]byte(fmt.Sprintf("touch %s %d %s\r\n", key, exptime, option)))
-	if err != nil {
-		return err
-	}
-
-	err = c.rw.Flush()
-	if err != nil {
-		return err
-	}
+	c.write([]byte(fmt.Sprintf("touch %s %d %s\r\n", key, exptime, option)))
+	c.flush()
 
 	if noreply {
 		return nil
@@ -564,21 +539,11 @@ func (c *Client) StatsArg(argument string) (map[string]string, error) {
 }
 
 func (c *Client) stats(command []byte) (map[string]string, error) {
-	err := c.ensureConnected()
-	if err != nil {
-		return nil, err
-	}
+	c.ensureConnected()
 
 	// Send command: stats\r\n
-	_, err = c.rw.Write(command)
-	if err != nil {
-		return nil, err
-	}
-
-	err = c.rw.Flush()
-	if err != nil {
-		return nil, err
-	}
+	c.write(command)
+	c.flush()
 
 	m := make(map[string]string)
 	for {
@@ -603,10 +568,7 @@ func (c *Client) stats(command []byte) (map[string]string, error) {
 // FlushAll invalidates all existing items immediately (by default) or after the delay
 // specified. If delay is < 0, it ignores the delay.
 func (c *Client) FlushAll(delay int, noreply bool) error {
-	err := c.ensureConnected()
-	if err != nil {
-		return err
-	}
+	c.ensureConnected()
 
 	option := ""
 	if noreply {
@@ -615,18 +577,11 @@ func (c *Client) FlushAll(delay int, noreply bool) error {
 
 	// flush_all [delay] [noreply]\r\n
 	if delay >= 0 {
-		_, err = c.rw.Write([]byte(fmt.Sprintf("flush_all %d %s\r\n", delay, option)))
+		c.write([]byte(fmt.Sprintf("flush_all %d %s\r\n", delay, option)))
 	} else {
-		_, err = c.rw.Write([]byte(fmt.Sprintf("flush_all %s\r\n", option)))
+		c.write([]byte(fmt.Sprintf("flush_all %s\r\n", option)))
 	}
-	if err != nil {
-		return err
-	}
-
-	err = c.rw.Flush()
-	if err != nil {
-		return err
-	}
+	c.flush()
 
 	if noreply {
 		return nil
@@ -647,22 +602,12 @@ func (c *Client) FlushAll(delay int, noreply bool) error {
 
 // Version returns the version of memcached server
 func (c *Client) Version() (string, error) {
-	err := c.ensureConnected()
-	if err != nil {
-		return "", err
-	}
+	c.ensureConnected()
 
 	// version\r\n
 	// NOTE: noreply option is not allowed.
-	_, err = c.rw.Write([]byte("version\r\n"))
-	if err != nil {
-		return "", err
-	}
-
-	err = c.rw.Flush()
-	if err != nil {
-		return "", err
-	}
+	c.write([]byte("version\r\n"))
+	c.flush()
 
 	// Receive reply
 	reply, err1 := c.receiveReply()
@@ -680,17 +625,10 @@ func (c *Client) Version() (string, error) {
 
 // Quit closes the connection to memcached server
 func (c *Client) Quit() error {
-	err := c.ensureConnected()
-	if err != nil {
-		return err
-	}
+	c.ensureConnected()
 
 	// quit\r\n
 	// NOTE: noreply option is not allowed.
-	_, err = c.rw.Write([]byte("quit\r\n"))
-	if err != nil {
-		return err
-	}
-
-	return c.rw.Flush()
+	c.write([]byte("quit\r\n"))
+	return c.flush()
 }
