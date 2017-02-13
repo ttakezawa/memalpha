@@ -195,6 +195,12 @@ func TestLocalhost(t *testing.T) {
 		t.Fatalf("cas(foo, swapped, casid) Error = %v, want %v", err, ErrCasConflict)
 	}
 
+	// CompareAndSwap raises ErrNotFound
+	err = c.CompareAndSwap("not_exists", []byte("ignored"), 42)
+	if err != ErrNotFound {
+		t.Fatalf("cas(not_exists) Error = %q, want ErrNotFound", err)
+	}
+
 	// Delete
 	err = c.Delete("foo", false)
 	if err != nil {
