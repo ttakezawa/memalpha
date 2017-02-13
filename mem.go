@@ -108,7 +108,7 @@ func NewClient(addr string) *Client {
 }
 
 func (c *Client) ensureConnected() error {
-	if c.conn != nil {
+	if c.rw != nil {
 		return nil
 	}
 
