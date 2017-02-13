@@ -419,22 +419,22 @@ func (c *Client) Delete(key string, noreply bool) error {
 		return err
 	}
 
-	if !noreply {
-		// Receive reply
-		reply, err1 := c.receiveReply()
-		if err1 != nil {
-			return err1
-		}
-		switch {
-		case bytes.Equal(reply, replyDeleted):
-			return nil
-		case bytes.Equal(reply, replyNotFound):
-			return ErrNotFound
-		}
-		return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
+	if noreply {
+		return nil
 	}
 
-	return nil
+	// Receive reply
+	reply, err1 := c.receiveReply()
+	if err1 != nil {
+		return err1
+	}
+	switch {
+	case bytes.Equal(reply, replyDeleted):
+		return nil
+	case bytes.Equal(reply, replyNotFound):
+		return ErrNotFound
+	}
+	return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
 }
 
 //// Increment/Decrement
@@ -478,27 +478,27 @@ func (c *Client) executeIncrDecrCommand(command string, key string, value uint64
 		return 0, err
 	}
 
-	if !noreply {
-		// Receive reply
-		reply, err1 := c.receiveReply()
-		if err1 != nil {
-			return 0, err1
-		}
-		switch {
-		case bytes.Equal(reply, replyNotFound):
-			return 0, ErrNotFound
-		}
-		if err1 = checkReply(reply); err1 != nil {
-			return 0, err1
-		}
-		newValue, err1 := strconv.ParseUint(string(reply), 10, 64)
-		if err1 != nil {
-			return 0, err1
-		}
-		return newValue, nil
+	if noreply {
+		return 0, nil
 	}
 
-	return 0, nil
+	// Receive reply
+	reply, err1 := c.receiveReply()
+	if err1 != nil {
+		return 0, err1
+	}
+	switch {
+	case bytes.Equal(reply, replyNotFound):
+		return 0, ErrNotFound
+	}
+	if err1 = checkReply(reply); err1 != nil {
+		return 0, err1
+	}
+	newValue, err1 := strconv.ParseUint(string(reply), 10, 64)
+	if err1 != nil {
+		return 0, err1
+	}
+	return newValue, nil
 }
 
 //// Touch
@@ -526,23 +526,23 @@ func (c *Client) Touch(key string, exptime int32, noreply bool) error {
 		return err
 	}
 
-	if !noreply {
-		// Recieve reply
-		reply, err1 := c.receiveReply()
-		if err1 != nil {
-			return err1
-		}
-		switch {
-		case bytes.Equal(reply, replyTouched):
-			return nil
-		case bytes.Equal(reply, replyNotFound):
-			return ErrNotFound
-			// TODO: case ERROR, CLIENT_ERROR, SERVER_ERROR
-		}
-		return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
+	if noreply {
+		return nil
 	}
 
-	return nil
+	// Recieve reply
+	reply, err1 := c.receiveReply()
+	if err1 != nil {
+		return err1
+	}
+	switch {
+	case bytes.Equal(reply, replyTouched):
+		return nil
+	case bytes.Equal(reply, replyNotFound):
+		return ErrNotFound
+		// TODO: case ERROR, CLIENT_ERROR, SERVER_ERROR
+	}
+	return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
 }
 
 //// Slabs Reassign (Not Impl)
@@ -628,21 +628,21 @@ func (c *Client) FlushAll(delay int, noreply bool) error {
 		return err
 	}
 
-	if !noreply {
-		// Recieve reply
-		reply, err1 := c.receiveReply()
-		if err1 != nil {
-			return err1
-		}
-		switch {
-		case bytes.Equal(reply, replyOk):
-			return nil
-			// TODO: case ERROR, CLIENT_ERROR, SERVER_ERROR
-		}
-		return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
+	if noreply {
+		return nil
 	}
 
-	return nil
+	// Recieve reply
+	reply, err1 := c.receiveReply()
+	if err1 != nil {
+		return err1
+	}
+	switch {
+	case bytes.Equal(reply, replyOk):
+		return nil
+		// TODO: case ERROR, CLIENT_ERROR, SERVER_ERROR
+	}
+	return ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
 }
 
 // Version returns the version of memcached server
