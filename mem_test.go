@@ -375,4 +375,10 @@ func TestLocalhost(t *testing.T) {
 	if c.conn == nil {
 		t.Fatalf("net.Conn = %q, want nil", c.conn)
 	}
+
+	// Close
+	err = c.Close()
+	if err != nil {
+		t.Fatalf("close connection: %v", err)
+	}
 }
