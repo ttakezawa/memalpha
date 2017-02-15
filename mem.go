@@ -99,7 +99,14 @@ func NewClient(addr string) *Client {
 
 // Close a connection.
 func (c *Client) Close() error {
-	return c.conn.Close()
+	if c.conn == nil {
+		return nil
+	}
+
+	err := c.conn.Close()
+	c.rw = nil
+	c.conn = nil
+	return err
 }
 
 func (c *Client) ensureConnected() {

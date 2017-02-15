@@ -378,7 +378,9 @@ func TestLocalhost(t *testing.T) {
 
 	// Close
 	err = c.Close()
-	if err != nil {
-		t.Fatalf("close connection: %v", err)
-	}
+	assert.Nil(t, err)
+
+	// Close again
+	err = c.Close()
+	assert.Nil(t, err)
 }
