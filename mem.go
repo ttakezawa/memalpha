@@ -503,7 +503,7 @@ func (c *Client) Touch(key string, exptime int32, noreply bool) error {
 		return c.Err()
 	}
 
-	// Recieve reply
+	// Receive reply
 	c.receiveCheckReply()
 	return c.Err()
 }
@@ -575,7 +575,7 @@ func (c *Client) FlushAll(delay int, noreply bool) error {
 		return c.Err()
 	}
 
-	// Recieve reply
+	// Receive reply
 	c.receiveCheckReply()
 	return c.Err()
 }

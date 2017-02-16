@@ -18,7 +18,7 @@ func freePort() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer l.Close()
+	defer func() { _ = l.Close() }()
 
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
@@ -70,7 +70,7 @@ func TestLocalhost(t *testing.T) {
 	if err != nil {
 		t.Skipf("skipping test; couldn't start memcached: %s", err)
 	}
-	defer memd.Shutdown()
+	defer func() { _ = memd.Shutdown() }()
 
 	c := memd.client
 
