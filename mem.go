@@ -78,10 +78,10 @@ var (
 
 // Conn is a memcached connection
 type Conn struct {
-	Addr string
-	conn net.Conn
-	rw   *bufio.ReadWriter
-	err  error
+	Addr    string
+	netConn net.Conn
+	rw      *bufio.ReadWriter
+	err     error
 }
 
 // Response is a response of get
@@ -99,13 +99,13 @@ func NewConn(addr string) *Conn {
 
 // Close a connection.
 func (c *Conn) Close() error {
-	if c.conn == nil {
+	if c.netConn == nil {
 		return nil
 	}
 
-	err := c.conn.Close()
+	err := c.netConn.Close()
 	c.rw = nil
-	c.conn = nil
+	c.netConn = nil
 	return err
 }
 
@@ -124,7 +124,7 @@ func (c *Conn) ensureConnected() {
 		return
 	}
 
-	c.conn = conn
+	c.netConn = conn
 	c.rw = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 }
 
