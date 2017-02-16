@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
-	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -76,255 +75,161 @@ func TestLocalhost(t *testing.T) {
 
 	mustSet := func(key string, value []byte) {
 		err := c.Set(key, value, true)
-		assert.Nil(t, err)
+		assert.NoError(t, err, fmt.Sprintf("must Set(%q, %q)", key, value))
 	}
 
 	assertItem := func(key string, expected []byte) {
 		value, _, err := c.Get(key)
 		assert.Nil(t, err)
+		assert.NoError(t, err, fmt.Sprintf("must Get(%q)", key))
 		assert.Equal(t, expected, value)
 	}
 
 	// Set
 	err = c.Set("foo", []byte("fooval"), false)
-	if err != nil {
-		t.Fatalf("first set(foo): %v", err)
-	}
+	assert.NoError(t, err, "first set(foo)")
+
 	err = c.Set("foo", []byte("fooval"), false)
-	if err != nil {
-		t.Fatalf("second set(foo): %v", err)
-	}
+	assert.NoError(t, err, "second set(foo)")
 
 	// Get
 	value, _, err := c.Get("foo")
-	if err != nil {
-		t.Fatalf("get(foo): %v", err)
-	}
-	if !bytes.Equal(value, []byte("fooval")) {
-		t.Fatalf("get(foo) Value = %q, want fooval", value)
-	}
+	assert.NoError(t, err, "get(foo)")
+	assert.Equal(t, []byte("fooval"), value, "get(fool)")
 
 	// Set large item
 	largeKey := string(bytes.Repeat([]byte("A"), 250))
 	largeValue := bytes.Repeat([]byte("A"), 1023*1024)
 	err = c.Set(largeKey, largeValue, false)
-	if err != nil {
-		t.Fatalf("set(largeKey): %v", err)
-	}
+	assert.NoError(t, err, "set(largeKey)")
 
 	// Get large item
 	value, _, err = c.Get(largeKey)
-	if err != nil {
-		t.Fatalf("get(largeKey): %v", err)
-	}
-	if !bytes.Equal(value, largeValue) {
-		peekLen := len(value)
-		if peekLen > 10 {
-			peekLen = 10
-		}
-		t.Fatalf("get(largeKey) Value = %q, want fooval", value[:peekLen])
-	}
+	assert.NoError(t, err, "get(largeKey)")
+	assert.Equal(t, largeValue, value, "get(largeKey)")
 
 	// TODO: Set noreply
 
 	// Gets
-	err = c.Set("bar", []byte("barval"), false)
-	if err != nil {
-		t.Fatalf("set(bar): %v", err)
-	}
+	mustSet("bar", []byte("barval"))
 	m, err := c.Gets([]string{"foo", "bar"})
-	if err != nil {
-		t.Fatalf("gets(foo, bar): %v", err)
-	}
+	assert.NoError(t, err, "gets(foo, bar)")
 	keyToValue := make(map[string]string)
 	for key, response := range m {
 		keyToValue[key] = string(response.Value)
 	}
 	expected := map[string]string{"foo": "fooval", "bar": "barval"}
-	if !reflect.DeepEqual(keyToValue, expected) {
-		t.Fatalf("gets(foo, bar) Value = %+v, want %+v", m, expected)
-	}
+	assert.Equal(t, expected, keyToValue, "gets(foo, bar)")
 
 	// Add
 	err = c.Add("baz", []byte("baz1"))
-	if err != nil {
-		t.Fatalf("first add(baz): %v", err)
-	}
+	assert.NoError(t, err, "first add(baz)")
 	err = c.Add("baz", []byte("baz2"))
-	if err != ErrNotStored {
-		t.Fatalf("second add(baz) Error = ErrNotStored, want %+v", err)
-	}
+	assert.Equal(t, ErrNotStored, err, "second add(baz)")
+
 	// TODO: Add noreply
 
 	// Replace
 	mustSet("foo", []byte("fooval"))
 	err = c.Replace("foo", []byte("fooval2"))
-	if err != nil {
-		t.Fatalf("replace(foo): %v", err)
-	}
-	value, _, err = c.Get("foo")
-	if err != nil {
-		t.Fatalf("get(foo): %v", err)
-	}
-	if !bytes.Equal(value, []byte("fooval2")) {
-		t.Fatalf("replace(foo, fooval2) then, get(foo) Value = %q, want fooval2", value)
-	}
+	assert.NoError(t, err, "replace(foo)")
+	assertItem("foo", []byte("fooval2"))
+
 	// TODO: Replace noreply
 
 	// Append
 	err = c.Append("foo", []byte("suffix"))
-	if err != nil {
-		t.Fatalf("append(foo, suffix): %v", err)
-	}
-	value, _, err = c.Get("foo")
-	if err != nil {
-		t.Fatalf("get(foo): %v", err)
-	}
-	if !bytes.Equal(value, []byte("fooval2suffix")) {
-		t.Fatalf("append(foo, suffix) then, get(foo) Value = %q, want fooval2suffix", value)
-	}
+	assert.NoError(t, err, "append(foo, suffix)")
+	assertItem("foo", []byte("fooval2suffix"))
+
 	// TODO: Replace noreply
 
 	// Prepend
 	err = c.Prepend("foo", []byte("prefix"))
-	if err != nil {
-		t.Fatalf("prepend(foo, prefix): %v", err)
-	}
-	value, _, err = c.Get("foo")
-	if err != nil {
-		t.Fatalf("get(foo): %v", err)
-	}
-	if !bytes.Equal(value, []byte("prefixfooval2suffix")) {
-		t.Fatalf("prepend(foo, prefix) then, get(foo) Value = %q, want prefixfooval2suffix", value)
-	}
+	assert.NoError(t, err, "prepend(foo, prefix)")
+	assertItem("foo", []byte("prefixfooval2suffix"))
+
 	// TODO: Prepend noreply
 
 	// CompareAndSwap
 	m, err = c.Gets([]string{"foo"})
-	if err != nil {
-		t.Fatalf("gets(foo): %v", err)
-	}
+	assert.NoError(t, err, "gets(foo)")
 	err = c.CompareAndSwap("foo", []byte("swapped"), m["foo"].CasID)
-	if err != nil {
-		t.Fatalf("cas(foo, swapped, casid): %v", err)
-	}
+	assert.NoError(t, err, "cas(foo, swapped, casid)")
 	err = c.CompareAndSwap("foo", []byte("swapped"), m["foo"].CasID)
-	if err != ErrCasConflict {
-		t.Fatalf("cas(foo, swapped, casid) Error = %v, want %v", err, ErrCasConflict)
-	}
+	assert.Equal(t, ErrCasConflict, err, "cas(foo, swapped, casid)")
+
 	// TODO: CompareAndSwap noreply
 
 	// CompareAndSwap raises ErrNotFound
 	err = c.CompareAndSwap("not_exists", []byte("ignored"), 42)
-	if err != ErrNotFound {
-		t.Fatalf("cas(not_exists) Error = %q, want ErrNotFound", err)
-	}
+	assert.Equal(t, ErrNotFound, err, "cas(not_exists)")
 
 	// Delete
 	err = c.Delete("foo", false)
-	if err != nil {
-		t.Fatalf("delete(foo): %v", err)
-	}
+	assert.NoError(t, err, "delete(foo)")
 	_, _, err = c.Get("foo")
-	if err != ErrCacheMiss {
-		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
-	}
+	assert.Equal(t, ErrCacheMiss, err, "get(foo)")
 
 	// Delete noreply
 	mustSet("foo", []byte("exist"))
 	err = c.Delete("foo", true)
-	assert.Nil(t, err)
+	assert.NoError(t, err, "delete(foo, noreply)")
 	_, _, err = c.Get("foo")
-	if err != ErrCacheMiss {
-		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
-	}
+	assert.Equal(t, ErrCacheMiss, err, "get(foo)")
 
 	// Delete raises ErrNotFound
 	err = c.Delete("not_exists", false)
-	if err != ErrNotFound {
-		t.Fatalf("delete(not_exists) Error = %q, want ErrNotFound", err)
-	}
+	assert.Equal(t, ErrNotFound, err, "delete(not_exists)")
 
 	// Increment
 	mustSet("foo", []byte("35"))
 	num, err := c.Increment("foo", 7, false)
-	if err != nil {
-		t.Fatalf("incr(foo, 7): %v", err)
-	}
-	if num != 42 {
-		t.Fatalf("incr(foo, 7) Value = %q, want 42", num)
-	}
+	assert.NoError(t, err, "incr(foo, 7)")
+	assert.EqualValues(t, 42, num, "incr(foo, 7)")
 
 	// Increment noreply
 	num, err = c.Increment("foo", 2, true)
-	assert.Nil(t, err)
+	assert.NoError(t, err, "incr(foo, 2, noreply)")
 	assertItem("foo", []byte("44"))
 
 	// Increment raises ErrNotFound
 	_, err = c.Increment("not_exists", 10, false)
-	if err != ErrNotFound {
-		t.Fatalf("incr(not_exists) Error = %q, want ErrNotFound", err)
-	}
+	assert.Equal(t, ErrNotFound, err, "incr(not_exists, 10)")
 
 	// Decrement
 	num, err = c.Decrement("foo", 2, false)
-	if err != nil {
-		t.Fatalf("decr(foo, 2): %v", err)
-	}
-	if num != 42 {
-		t.Fatalf("decr(foo, 2) Value = %q, want 42", num)
-	}
-	value, _, err = c.Get("foo")
-	if err != nil {
-		t.Fatalf("get(foo): %v", err)
-	}
-	if !bytes.Equal(value, []byte("42")) {
-		t.Fatalf("get(foo) Value = %q, want 42", value)
-	}
+	assert.NoError(t, err, "decr(foo, 2)")
+	assert.EqualValues(t, 42, num, "decr(foo, 2)")
+	assertItem("foo", []byte("42"))
 
 	// Touch
 	err = c.Touch("foo", 2, false)
-	if err != nil {
-		t.Fatalf("touch(foo, 2): %v", err)
-	}
-	value, _, err = c.Get("foo")
-	if err != nil {
-		t.Fatalf("get(foo): %v", err)
-	}
-	if !bytes.Equal(value, []byte("42")) {
-		t.Fatalf("get(foo) Value = %q, want 42", value)
-	}
+	assert.NoError(t, err, "touch(foo, 2)")
+	assertItem("foo", []byte("42"))
 	time.Sleep(2 * time.Second)
 	_, _, err = c.Get("foo")
-	if err != ErrCacheMiss {
-		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
-	}
+	assert.Equal(t, ErrCacheMiss, err, "get(foo)")
 
 	// Touch noreply
 	mustSet("foo", []byte("val"))
 	err = c.Touch("foo", 2, true)
-	assert.Nil(t, err)
+	assert.NoError(t, err, "touch(foo, 2, noreply)")
 
 	// Touch raises ErrNotFound
 	err = c.Touch("not_exists", 10, false)
-	if err != ErrNotFound {
-		t.Fatalf("touch(not_exists) Error = %q, want ErrNotFound", err)
-	}
+	assert.Equal(t, ErrNotFound, err, "touch(not_exists)")
 
 	// Stats
 	stats, err := c.Stats()
-	if err != nil {
-		t.Fatalf("stats(): %v", err)
-	}
+	assert.NoError(t, err, "stats()")
 	if len(stats) < 2 {
 		t.Fatalf("stats(): len(Value) = %q, want len(value) > 2", stats)
 	}
 
 	// StatsArg
 	stats, err = c.StatsArg("slabs")
-	if err != nil {
-		t.Fatalf("stats(): %v", err)
-	}
+	assert.NoError(t, err, "stats(slabs)")
 	if len(stats) < 2 {
 		t.Fatalf("stats(): len(Value) = %q, want len(value) > 2", stats)
 	}
@@ -332,55 +237,43 @@ func TestLocalhost(t *testing.T) {
 	// FlushAll
 	mustSet("foo", []byte("bar"))
 	err = c.FlushAll(0, false)
-	if err != nil {
-		t.Fatalf("version(): %v", err)
-	}
+	assert.NoError(t, err, "flush_all(0)")
 	_, _, err = c.Get("foo")
-	if err != ErrCacheMiss {
-		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
-	}
+	assert.Equal(t, ErrCacheMiss, err, "get(foo)")
 
 	// FlushAll delayed
 	mustSet("foo", []byte("val"))
 	err = c.FlushAll(1, false)
-	assert.Nil(t, err)
+	assert.NoError(t, err, "flush_all(1)")
 	time.Sleep(1 * time.Second)
 	_, _, err = c.Get("foo")
-	if err != ErrCacheMiss {
-		t.Fatalf("get(foo) Error = %q, want ErrCacheMiss", err)
-	}
+	assert.Equal(t, ErrCacheMiss, err, "get(foo)")
 
 	// FlushAll non optional delayed
 	err = c.FlushAll(-1, false)
-	assert.Nil(t, err)
+	assert.NoError(t, err, "flush_all(-1)")
 
 	// FlushAll noreply
 	err = c.FlushAll(0, true)
-	assert.Nil(t, err)
+	assert.NoError(t, err, "flush_all(0, noreply)")
 
 	// Version
 	ver, err := c.Version()
-	if err != nil {
-		t.Fatalf("version(): %v", err)
-	}
-	if len(ver) == 0 {
-		t.Fatalf("version() Value = %q, want len(value) > 0", ver)
-	}
+	assert.NoError(t, err, "version()")
+	assert.NotEmpty(t, ver, "version()")
 
 	// Quit
 	err = c.Quit()
-	if err != nil {
-		t.Fatalf("quit(): %v", err)
-	}
+	assert.NoError(t, err, "quit()")
 	if c.conn == nil {
 		t.Fatalf("net.Conn = %q, want nil", c.conn)
 	}
 
 	// Close
 	err = c.Close()
-	assert.Nil(t, err)
+	assert.NoError(t, err, "c.Close()")
 
 	// Close again
 	err = c.Close()
-	assert.Nil(t, err)
+	assert.NoError(t, err, "retry c.Close()")
 }
