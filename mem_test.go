@@ -113,6 +113,21 @@ func TestLocalhost(t *testing.T) {
 	assert.NoError(t, err, "set(set_norep, val, noreply)")
 	assertItem("set_norep", []byte("val"))
 
+	// Set with flags
+	err = c.Set("set_flags", []byte("val"), 42, 0, false)
+	assert.NoError(t, err, "set(set_flags, val, flags = 42)")
+	value, flags, err := c.Get("set_flags")
+	assert.NoError(t, err, "get(set_flags)")
+	assert.EqualValues(t, 42, flags, "get(set_flags)")
+
+	// Set with exptime
+	err = c.Set("set_exptime", []byte("val"), 0, 1, false)
+	assert.NoError(t, err, "set(set_exptime, val, exptime = 1)")
+	assertItem("set_exptime", []byte("val"))
+	time.Sleep(time.Second)
+	value, _, err = c.Get("set_exptime")
+	assert.Equal(t, ErrCacheMiss, err, "get(set_exptime)")
+
 	// Gets
 	mustSet("bar", []byte("barval"))
 	m, err := c.Gets([]string{"foo", "bar"})
