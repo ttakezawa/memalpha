@@ -48,7 +48,7 @@ to quickly create a Cobra application.`,
 			fmt.Printf("err: %+v\n", err)
 			return
 		}
-		err = client.CompareAndSwap(args[0], []byte(args[1]), casid, false)
+		err = client.CompareAndSwap(args[0], []byte(args[1]), casid, 0, 0, false)
 		fmt.Printf("err: %+v\n", err)
 	},
 }

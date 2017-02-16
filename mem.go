@@ -358,46 +358,38 @@ func (c *Client) sendStorageCommand(command string, key string, value []byte, fl
 	return c.Err()
 }
 
-// Set key
-func (c *Client) Set(key string, value []byte, noreply bool) error {
-	var flags uint32
-	exptime := 0
+// Set means "store this data".
+func (c *Client) Set(key string, value []byte, flags uint32, exptime int, noreply bool) error {
 	return c.sendStorageCommand("set", key, value, flags, exptime, 0, noreply)
 }
 
-// Add key
-func (c *Client) Add(key string, value []byte, noreply bool) error {
-	var flags uint32
-	exptime := 0
+// Add means "store this data, but only if the server *doesn't* already hold data for this
+// key".
+func (c *Client) Add(key string, value []byte, flags uint32, exptime int, noreply bool) error {
 	return c.sendStorageCommand("add", key, value, flags, exptime, 0, noreply)
 }
 
-// Replace key
-func (c *Client) Replace(key string, value []byte, noreply bool) error {
-	var flags uint32
-	exptime := 0
+// Replace means "store this data, but only if the server *does* already hold data for
+// this key".
+func (c *Client) Replace(key string, value []byte, flags uint32, exptime int, noreply bool) error {
 	return c.sendStorageCommand("replace", key, value, flags, exptime, 0, noreply)
 }
 
-// Append key
+// Append means "add this data to an existing key after existing data". It ignores flags
+// and exptime settings.
 func (c *Client) Append(key string, value []byte, noreply bool) error {
-	var flags uint32
-	exptime := 0
-	return c.sendStorageCommand("append", key, value, flags, exptime, 0, noreply)
+	return c.sendStorageCommand("append", key, value, 0, 0, 0, noreply)
 }
 
-// Prepend key
+// Prepend means "add this data to an existing key before existing data". It ignores flags
+// and exptime settings.
 func (c *Client) Prepend(key string, value []byte, noreply bool) error {
-	var flags uint32
-	exptime := 0
-	return c.sendStorageCommand("prepend", key, value, flags, exptime, 0, noreply)
+	return c.sendStorageCommand("prepend", key, value, 0, 0, 0, noreply)
 }
 
 // CompareAndSwap is a check and set operation which means "store this data but only if no
 // one else has updated since I last fetched it."
-func (c *Client) CompareAndSwap(key string, value []byte, casid uint64, noreply bool) error {
-	var flags uint32
-	exptime := 0
+func (c *Client) CompareAndSwap(key string, value []byte, casid uint64, flags uint32, exptime int, noreply bool) error {
 	return c.sendStorageCommand("cas", key, value, flags, exptime, casid, noreply)
 }
 
