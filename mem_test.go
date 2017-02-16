@@ -74,7 +74,7 @@ func TestLocalhost(t *testing.T) {
 	c := memd.client
 
 	mustSet := func(key string, value []byte) {
-		err := c.Set(key, value, true)
+		err := c.Set(key, value, 0, 0, true)
 		assert.NoError(t, err, fmt.Sprintf("must Set(%q, %q)", key, value))
 	}
 
@@ -86,10 +86,10 @@ func TestLocalhost(t *testing.T) {
 	}
 
 	// Set
-	err = c.Set("foo", []byte("fooval"), false)
+	err = c.Set("foo", []byte("fooval"), 0, 0, false)
 	assert.NoError(t, err, "first set(foo)")
 
-	err = c.Set("foo", []byte("fooval"), false)
+	err = c.Set("foo", []byte("fooval"), 0, 0, false)
 	assert.NoError(t, err, "second set(foo)")
 
 	// Get
@@ -100,7 +100,7 @@ func TestLocalhost(t *testing.T) {
 	// Set large item
 	largeKey := string(bytes.Repeat([]byte("A"), 250))
 	largeValue := bytes.Repeat([]byte("A"), 1023*1024)
-	err = c.Set(largeKey, largeValue, false)
+	err = c.Set(largeKey, largeValue, 0, 0, false)
 	assert.NoError(t, err, "set(largeKey)")
 
 	// Get large item
@@ -109,7 +109,7 @@ func TestLocalhost(t *testing.T) {
 	assert.Equal(t, largeValue, value, "get(largeKey)")
 
 	// Set noreply
-	err = c.Set("set_norep", []byte("val"), true)
+	err = c.Set("set_norep", []byte("val"), 0, 0, true)
 	assert.NoError(t, err, "set(set_norep, val, noreply)")
 	assertItem("set_norep", []byte("val"))
 
@@ -125,24 +125,24 @@ func TestLocalhost(t *testing.T) {
 	assert.Equal(t, expected, keyToValue, "gets(foo, bar)")
 
 	// Add
-	err = c.Add("baz", []byte("baz1"), false)
+	err = c.Add("baz", []byte("baz1"), 0, 0, false)
 	assert.NoError(t, err, "first add(baz)")
-	err = c.Add("baz", []byte("baz2"), false)
+	err = c.Add("baz", []byte("baz2"), 0, 0, false)
 	assert.Equal(t, ErrNotStored, err, "second add(baz)")
 
 	// Add noreply
-	err = c.Add("add_norep", []byte("val"), true)
+	err = c.Add("add_norep", []byte("val"), 0, 0, true)
 	assert.NoError(t, err, "add(add_norep, noreply)")
 	assertItem("add_norep", []byte("val"))
 
 	// Replace
 	mustSet("foo", []byte("fooval"))
-	err = c.Replace("foo", []byte("fooval2"), false)
+	err = c.Replace("foo", []byte("fooval2"), 0, 0, false)
 	assert.NoError(t, err, "replace(foo, fooval2)")
 	assertItem("foo", []byte("fooval2"))
 
 	// Replace noreply
-	err = c.Replace("foo", []byte("fooval3"), true)
+	err = c.Replace("foo", []byte("fooval3"), 0, 0, true)
 	assert.NoError(t, err, "replace(foo, fooval3, noreply)")
 	assertItem("foo", []byte("fooval3"))
 
@@ -170,21 +170,21 @@ func TestLocalhost(t *testing.T) {
 	// CompareAndSwap
 	m, err = c.Gets([]string{"foo"})
 	assert.NoError(t, err, "gets(foo)")
-	err = c.CompareAndSwap("foo", []byte("swapped"), m["foo"].CasID, false)
+	err = c.CompareAndSwap("foo", []byte("swapped"), m["foo"].CasID, 0, 0, false)
 	assert.NoError(t, err, "cas(foo, swapped, casid)")
-	err = c.CompareAndSwap("foo", []byte("swapped_failed"), m["foo"].CasID, false)
+	err = c.CompareAndSwap("foo", []byte("swapped_failed"), m["foo"].CasID, 0, 0, false)
 	assert.Equal(t, ErrCasConflict, err, "cas(foo, swapped_faile, casid)")
 	assertItem("foo", []byte("swapped"))
 
 	// CompareAndSwap noreply
 	m, err = c.Gets([]string{"foo"})
 	assert.NoError(t, err, "gets(foo)")
-	err = c.CompareAndSwap("foo", []byte("swapped_norep"), m["foo"].CasID, true)
+	err = c.CompareAndSwap("foo", []byte("swapped_norep"), m["foo"].CasID, 0, 0, true)
 	assert.NoError(t, err, "cas(foo, swapped_norep, casid)")
 	assertItem("foo", []byte("swapped_norep"))
 
 	// CompareAndSwap raises ErrNotFound
-	err = c.CompareAndSwap("not_exists", []byte("ignored"), 42, false)
+	err = c.CompareAndSwap("not_exists", []byte("ignored"), 42, 0, 0, false)
 	assert.Equal(t, ErrNotFound, err, "cas(not_exists)")
 
 	// Delete

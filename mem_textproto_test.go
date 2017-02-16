@@ -37,7 +37,7 @@ func TestServerError(t *testing.T) {
 	errorMessage := "test fake"
 	c := newFakedClient("SERVER_ERROR "+errorMessage, ioutil.Discard)
 
-	err := c.Set("foo", []byte("bar"), false)
+	err := c.Set("foo", []byte("bar"), 0, 0, false)
 	e, ok := err.(ServerError)
 	if ok && strings.Contains(e.Error(), "server error: "+errorMessage) {
 		return
@@ -50,7 +50,7 @@ func TestClientError(t *testing.T) {
 	errorMessage := "test fake"
 	c := newFakedClient("CLIENT_ERROR "+errorMessage, ioutil.Discard)
 
-	err := c.Set("foo", []byte("bar"), false)
+	err := c.Set("foo", []byte("bar"), 0, 0, false)
 	e, ok := err.(ClientError)
 	if ok && strings.Contains(e.Error(), "client error: "+errorMessage) {
 		return
@@ -61,7 +61,7 @@ func TestClientError(t *testing.T) {
 
 func TestReplyError(t *testing.T) {
 	c := newFakedClient("ERROR", ioutil.Discard)
-	err := c.Set("foo", []byte("bar"), false)
+	err := c.Set("foo", []byte("bar"), 0, 0, false)
 	assert.Equal(t, ErrReplyError, err)
 }
 
@@ -119,7 +119,7 @@ func TestMalformedGetResponse(t *testing.T) {
 
 func TestMalformedSetResponse(t *testing.T) {
 	c := newFakedClient("foobar", ioutil.Discard)
-	err := c.Set("foo", []byte("bar"), false)
+	err := c.Set("foo", []byte("bar"), 0, 0, false)
 	assert.IsType(t, ProtocolError(fmt.Sprintf("unknown reply type: %s", string("foobar"))), err)
 }
 
@@ -141,7 +141,7 @@ func TestMalformedStatsResponse(t *testing.T) {
 func TestIncrValueError(t *testing.T) {
 	c := newFakedClient("foobar", ioutil.Discard)
 
-	err := c.Set("foo", []byte("42"), true)
+	err := c.Set("foo", []byte("42"), 0, 0, true)
 	_, err = c.Increment("foo", 1, false)
 	assert.IsType(t, &strconv.NumError{}, err)
 }
