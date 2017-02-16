@@ -366,48 +366,38 @@ func (c *Client) Set(key string, value []byte, noreply bool) error {
 }
 
 // Add key
-func (c *Client) Add(key string, value []byte) error {
+func (c *Client) Add(key string, value []byte, noreply bool) error {
 	var flags uint32
 	exptime := 0
-	noreply := false
-
 	return c.sendStorageCommand("add", key, value, flags, exptime, 0, noreply)
 }
 
 // Replace key
-func (c *Client) Replace(key string, value []byte) error {
+func (c *Client) Replace(key string, value []byte, noreply bool) error {
 	var flags uint32
 	exptime := 0
-	noreply := false
-
 	return c.sendStorageCommand("replace", key, value, flags, exptime, 0, noreply)
 }
 
 // Append key
-func (c *Client) Append(key string, value []byte) error {
+func (c *Client) Append(key string, value []byte, noreply bool) error {
 	var flags uint32
 	exptime := 0
-	noreply := false
-
 	return c.sendStorageCommand("append", key, value, flags, exptime, 0, noreply)
 }
 
 // Prepend key
-func (c *Client) Prepend(key string, value []byte) error {
+func (c *Client) Prepend(key string, value []byte, noreply bool) error {
 	var flags uint32
 	exptime := 0
-	noreply := false
-
 	return c.sendStorageCommand("prepend", key, value, flags, exptime, 0, noreply)
 }
 
 // CompareAndSwap is a check and set operation which means "store this data but only if no
 // one else has updated since I last fetched it."
-func (c *Client) CompareAndSwap(key string, value []byte, casid uint64) error {
+func (c *Client) CompareAndSwap(key string, value []byte, casid uint64, noreply bool) error {
 	var flags uint32
 	exptime := 0
-	noreply := false
-
 	return c.sendStorageCommand("cas", key, value, flags, exptime, casid, noreply)
 }
 

@@ -82,7 +82,7 @@ func TestLocalhost(t *testing.T) {
 		value, _, err := c.Get(key)
 		assert.Nil(t, err)
 		assert.NoError(t, err, fmt.Sprintf("must Get(%q)", key))
-		assert.Equal(t, expected, value)
+		assert.Equal(t, string(expected), string(value))
 	}
 
 	// Set
@@ -108,7 +108,10 @@ func TestLocalhost(t *testing.T) {
 	assert.NoError(t, err, "get(largeKey)")
 	assert.Equal(t, largeValue, value, "get(largeKey)")
 
-	// TODO: Set noreply
+	// Set noreply
+	err = c.Set("set_norep", []byte("val"), true)
+	assert.NoError(t, err, "set(set_norep, val, noreply)")
+	assertItem("set_norep", []byte("val"))
 
 	// Gets
 	mustSet("bar", []byte("barval"))
@@ -122,47 +125,66 @@ func TestLocalhost(t *testing.T) {
 	assert.Equal(t, expected, keyToValue, "gets(foo, bar)")
 
 	// Add
-	err = c.Add("baz", []byte("baz1"))
+	err = c.Add("baz", []byte("baz1"), false)
 	assert.NoError(t, err, "first add(baz)")
-	err = c.Add("baz", []byte("baz2"))
+	err = c.Add("baz", []byte("baz2"), false)
 	assert.Equal(t, ErrNotStored, err, "second add(baz)")
 
-	// TODO: Add noreply
+	// Add noreply
+	err = c.Add("add_norep", []byte("val"), true)
+	assert.NoError(t, err, "add(add_norep, noreply)")
+	assertItem("add_norep", []byte("val"))
 
 	// Replace
 	mustSet("foo", []byte("fooval"))
-	err = c.Replace("foo", []byte("fooval2"))
-	assert.NoError(t, err, "replace(foo)")
+	err = c.Replace("foo", []byte("fooval2"), false)
+	assert.NoError(t, err, "replace(foo, fooval2)")
 	assertItem("foo", []byte("fooval2"))
 
-	// TODO: Replace noreply
+	// Replace noreply
+	err = c.Replace("foo", []byte("fooval3"), true)
+	assert.NoError(t, err, "replace(foo, fooval3, noreply)")
+	assertItem("foo", []byte("fooval3"))
 
 	// Append
-	err = c.Append("foo", []byte("suffix"))
+	err = c.Append("foo", []byte("suffix"), false)
 	assert.NoError(t, err, "append(foo, suffix)")
-	assertItem("foo", []byte("fooval2suffix"))
+	assertItem("foo", []byte("fooval3suffix"))
 
-	// TODO: Replace noreply
+	// Append noreply
+	mustSet("bar", []byte("fooval"))
+	err = c.Append("bar", []byte("app"), true)
+	assert.NoError(t, err, "replace(bar, app)")
+	assertItem("bar", []byte("foovalapp"))
 
 	// Prepend
-	err = c.Prepend("foo", []byte("prefix"))
+	err = c.Prepend("foo", []byte("prefix"), false)
 	assert.NoError(t, err, "prepend(foo, prefix)")
-	assertItem("foo", []byte("prefixfooval2suffix"))
+	assertItem("foo", []byte("prefixfooval3suffix"))
 
-	// TODO: Prepend noreply
+	// Prepend noreply
+	err = c.Prepend("foo", []byte("pre"), true)
+	assert.NoError(t, err, "prepend(foo, pre)")
+	assertItem("foo", []byte("preprefixfooval3suffix"))
 
 	// CompareAndSwap
 	m, err = c.Gets([]string{"foo"})
 	assert.NoError(t, err, "gets(foo)")
-	err = c.CompareAndSwap("foo", []byte("swapped"), m["foo"].CasID)
+	err = c.CompareAndSwap("foo", []byte("swapped"), m["foo"].CasID, false)
 	assert.NoError(t, err, "cas(foo, swapped, casid)")
-	err = c.CompareAndSwap("foo", []byte("swapped"), m["foo"].CasID)
-	assert.Equal(t, ErrCasConflict, err, "cas(foo, swapped, casid)")
+	err = c.CompareAndSwap("foo", []byte("swapped_failed"), m["foo"].CasID, false)
+	assert.Equal(t, ErrCasConflict, err, "cas(foo, swapped_faile, casid)")
+	assertItem("foo", []byte("swapped"))
 
-	// TODO: CompareAndSwap noreply
+	// CompareAndSwap noreply
+	m, err = c.Gets([]string{"foo"})
+	assert.NoError(t, err, "gets(foo)")
+	err = c.CompareAndSwap("foo", []byte("swapped_norep"), m["foo"].CasID, true)
+	assert.NoError(t, err, "cas(foo, swapped_norep, casid)")
+	assertItem("foo", []byte("swapped_norep"))
 
 	// CompareAndSwap raises ErrNotFound
-	err = c.CompareAndSwap("not_exists", []byte("ignored"), 42)
+	err = c.CompareAndSwap("not_exists", []byte("ignored"), 42, false)
 	assert.Equal(t, ErrNotFound, err, "cas(not_exists)")
 
 	// Delete
