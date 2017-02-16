@@ -37,7 +37,7 @@ func benchmarkGetStub(b *testing.B, keySize int, valueSize int) {
 	value := bytes.Repeat([]byte("A"), valueSize)
 
 	response := fmt.Sprintf("VALUE %s 0 %d\r\n%s\r\nEND\r\n", key, len(value), string(value))
-	c := &Client{
+	c := &Conn{
 		rw: bufio.NewReadWriter(
 			bufio.NewReader(newRepeatReader([]byte(response))),
 			bufio.NewWriter(ioutil.Discard),
@@ -65,14 +65,14 @@ func benchmarkGet(b *testing.B, keySize int, valueSize int) {
 	}
 	defer memd.Shutdown()
 
-	if err := memd.client.Set(key, value, 0, 0, false); err != nil {
+	if err := memd.conn.Set(key, value, 0, 0, false); err != nil {
 		b.Skipf("skipping test; couldn't set(%s, %s) = %+v", key, value, err)
 	}
 
 	b.SetBytes(int64(keySize + valueSize))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, _, err := memd.client.Get(key); err != nil {
+		if _, _, err := memd.conn.Get(key); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -89,14 +89,14 @@ func benchmarkSet(b *testing.B, keySize int, valueSize int) {
 	}
 	defer memd.Shutdown()
 
-	if err := memd.client.Set(key, value, 0, 0, false); err != nil {
+	if err := memd.conn.Set(key, value, 0, 0, false); err != nil {
 		b.Skipf("skipping test; couldn't set(%s, %s) = %+v", key, value, err)
 	}
 
 	b.SetBytes(int64(keySize + valueSize))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := memd.client.Set(key, value, 0, 0, false); err != nil {
+		if err := memd.conn.Set(key, value, 0, 0, false); err != nil {
 			b.Fatal(err)
 		}
 	}

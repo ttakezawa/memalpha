@@ -76,8 +76,8 @@ var (
 	optionNoreply = "noreply"
 )
 
-// Client is a memcached client
-type Client struct {
+// Conn is a memcached connection
+type Conn struct {
 	Addr string
 	conn net.Conn
 	rw   *bufio.ReadWriter
@@ -91,14 +91,14 @@ type Response struct {
 	CasID uint64
 }
 
-// NewClient returns a new Client.
-func NewClient(addr string) *Client {
-	client := &Client{Addr: addr}
-	return client
+// NewConn returns a new Conn.
+func NewConn(addr string) *Conn {
+	conn := &Conn{Addr: addr}
+	return conn
 }
 
 // Close a connection.
-func (c *Client) Close() error {
+func (c *Conn) Close() error {
 	if c.conn == nil {
 		return nil
 	}
@@ -109,7 +109,7 @@ func (c *Client) Close() error {
 	return err
 }
 
-func (c *Client) ensureConnected() {
+func (c *Conn) ensureConnected() {
 	if c.err != nil {
 		return
 	}
@@ -128,7 +128,7 @@ func (c *Client) ensureConnected() {
 	c.rw = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 }
 
-func (c *Client) readLine() []byte {
+func (c *Conn) readLine() []byte {
 	if c.err != nil {
 		return nil
 	}
@@ -143,14 +143,14 @@ func (c *Client) readLine() []byte {
 	return line
 }
 
-func (c *Client) write(p []byte) {
+func (c *Conn) write(p []byte) {
 	if c.err != nil {
 		return
 	}
 	_, c.err = c.rw.Write(p)
 }
 
-func (c *Client) flush() {
+func (c *Conn) flush() {
 	if c.err != nil {
 		return
 	}
@@ -158,20 +158,20 @@ func (c *Client) flush() {
 }
 
 // Err results in clearing c.err
-func (c *Client) Err() error {
+func (c *Conn) Err() error {
 	err := c.err
 	c.err = nil
 	return err
 }
 
-func (c *Client) receiveReply() []byte {
+func (c *Conn) receiveReply() []byte {
 	if c.err != nil {
 		return nil
 	}
 	return c.readLine()
 }
 
-func (c *Client) checkReply(reply []byte) (ok bool) {
+func (c *Conn) checkReply(reply []byte) (ok bool) {
 	if c.err != nil {
 		return false
 	}
@@ -195,7 +195,7 @@ func (c *Client) checkReply(reply []byte) (ok bool) {
 	return false
 }
 
-func (c *Client) receiveCheckReply() {
+func (c *Conn) receiveCheckReply() {
 	reply := c.receiveReply()
 	ok := c.checkReply(reply)
 
@@ -206,7 +206,7 @@ func (c *Client) receiveCheckReply() {
 
 //// Retrieval commands
 
-func (c *Client) sendRetrieveCommand(cmd string, key string) {
+func (c *Conn) sendRetrieveCommand(cmd string, key string) {
 	c.ensureConnected()
 
 	c.write([]byte(fmt.Sprintf("%s %s\r\n", cmd, key)))
@@ -214,7 +214,7 @@ func (c *Client) sendRetrieveCommand(cmd string, key string) {
 }
 
 // returns key, value, casId, flags, err
-func (c *Client) receiveGetResponse() (string, *Response) {
+func (c *Conn) receiveGetResponse() (string, *Response) {
 	header := c.readLine()
 	if c.err != nil {
 		return "", nil
@@ -241,7 +241,7 @@ func (c *Client) receiveGetResponse() (string, *Response) {
 	return key, response
 }
 
-func (c *Client) parseGetResponseHeader(header []byte, response *Response) (key string, size uint64, err error) {
+func (c *Conn) parseGetResponseHeader(header []byte, response *Response) (key string, size uint64, err error) {
 	// VALUE <key> <flags> <bytes> [<cas unique>]\r\n
 	headerChunks := strings.Split(string(header), " ")
 	debugf("debug header: %+v\n", headerChunks) // output for debug
@@ -275,7 +275,7 @@ func (c *Client) parseGetResponseHeader(header []byte, response *Response) (key 
 	return key, size, nil
 }
 
-func (c *Client) receiveGetResponseBody(size uint64) ([]byte, error) {
+func (c *Conn) receiveGetResponseBody(size uint64) ([]byte, error) {
 	buffer := make([]byte, size+2)
 	n, err := io.ReadFull(c.rw, buffer)
 	debugf("debug n: %+v\n", n) // output for debug
@@ -292,7 +292,7 @@ func (c *Client) receiveGetResponseBody(size uint64) ([]byte, error) {
 }
 
 // Get returns a value, flags and error.
-func (c *Client) Get(key string) (value []byte, flags uint32, err error) {
+func (c *Conn) Get(key string) (value []byte, flags uint32, err error) {
 	c.sendRetrieveCommand("get", key)
 
 	_, response := c.receiveGetResponse()
@@ -310,7 +310,7 @@ func (c *Client) Get(key string) (value []byte, flags uint32, err error) {
 }
 
 // Gets is an alternative get command for using with CAS.
-func (c *Client) Gets(keys []string) (map[string]*Response, error) {
+func (c *Conn) Gets(keys []string) (map[string]*Response, error) {
 	c.sendRetrieveCommand("gets", strings.Join(keys, " "))
 
 	m := make(map[string]*Response)
@@ -330,7 +330,7 @@ func (c *Client) Gets(keys []string) (map[string]*Response, error) {
 
 //// Storage commands
 
-func (c *Client) sendStorageCommand(command string, key string, value []byte, flags uint32, exptime int, casid uint64, noreply bool) error {
+func (c *Conn) sendStorageCommand(command string, key string, value []byte, flags uint32, exptime int, casid uint64, noreply bool) error {
 	c.ensureConnected()
 
 	option := ""
@@ -359,44 +359,44 @@ func (c *Client) sendStorageCommand(command string, key string, value []byte, fl
 }
 
 // Set means "store this data".
-func (c *Client) Set(key string, value []byte, flags uint32, exptime int, noreply bool) error {
+func (c *Conn) Set(key string, value []byte, flags uint32, exptime int, noreply bool) error {
 	return c.sendStorageCommand("set", key, value, flags, exptime, 0, noreply)
 }
 
 // Add means "store this data, but only if the server *doesn't* already hold data for this
 // key".
-func (c *Client) Add(key string, value []byte, flags uint32, exptime int, noreply bool) error {
+func (c *Conn) Add(key string, value []byte, flags uint32, exptime int, noreply bool) error {
 	return c.sendStorageCommand("add", key, value, flags, exptime, 0, noreply)
 }
 
 // Replace means "store this data, but only if the server *does* already hold data for
 // this key".
-func (c *Client) Replace(key string, value []byte, flags uint32, exptime int, noreply bool) error {
+func (c *Conn) Replace(key string, value []byte, flags uint32, exptime int, noreply bool) error {
 	return c.sendStorageCommand("replace", key, value, flags, exptime, 0, noreply)
 }
 
 // Append means "add this data to an existing key after existing data". It ignores flags
 // and exptime settings.
-func (c *Client) Append(key string, value []byte, noreply bool) error {
+func (c *Conn) Append(key string, value []byte, noreply bool) error {
 	return c.sendStorageCommand("append", key, value, 0, 0, 0, noreply)
 }
 
 // Prepend means "add this data to an existing key before existing data". It ignores flags
 // and exptime settings.
-func (c *Client) Prepend(key string, value []byte, noreply bool) error {
+func (c *Conn) Prepend(key string, value []byte, noreply bool) error {
 	return c.sendStorageCommand("prepend", key, value, 0, 0, 0, noreply)
 }
 
 // CompareAndSwap is a check and set operation which means "store this data but only if no
 // one else has updated since I last fetched it."
-func (c *Client) CompareAndSwap(key string, value []byte, casid uint64, flags uint32, exptime int, noreply bool) error {
+func (c *Conn) CompareAndSwap(key string, value []byte, casid uint64, flags uint32, exptime int, noreply bool) error {
 	return c.sendStorageCommand("cas", key, value, flags, exptime, casid, noreply)
 }
 
 //// Deletion
 
 // Delete deletes the item with the provided key
-func (c *Client) Delete(key string, noreply bool) error {
+func (c *Conn) Delete(key string, noreply bool) error {
 	c.ensureConnected()
 
 	option := ""
@@ -422,7 +422,7 @@ func (c *Client) Delete(key string, noreply bool) error {
 // the item. It is a decimal representation of a 64-bit unsigned integer. The return
 // value is the new value. If noreply is true, the return value is always 0.
 // Note that Overflow in the "incr" command will wrap around the 64 bit mark.
-func (c *Client) Increment(key string, value uint64, noreply bool) (uint64, error) {
+func (c *Conn) Increment(key string, value uint64, noreply bool) (uint64, error) {
 	return c.executeIncrDecrCommand("incr", key, value, noreply)
 }
 
@@ -431,11 +431,11 @@ func (c *Client) Increment(key string, value uint64, noreply bool) (uint64, erro
 // value is the new value. If noreply is true, the return value is always 0.
 // Note that underflow in the "decr" command is caught: if a client tries to decrease
 // the value below 0, the new value will be 0.
-func (c *Client) Decrement(key string, value uint64, noreply bool) (uint64, error) {
+func (c *Conn) Decrement(key string, value uint64, noreply bool) (uint64, error) {
 	return c.executeIncrDecrCommand("decr", key, value, noreply)
 }
 
-func (c *Client) executeIncrDecrCommand(command string, key string, value uint64, noreply bool) (uint64, error) {
+func (c *Conn) executeIncrDecrCommand(command string, key string, value uint64, noreply bool) (uint64, error) {
 	c.ensureConnected()
 
 	option := ""
@@ -469,7 +469,7 @@ func (c *Client) executeIncrDecrCommand(command string, key string, value uint64
 //// Touch
 
 // Touch is used to update the expiration time of an existing item without fetching it.
-func (c *Client) Touch(key string, exptime int32, noreply bool) error {
+func (c *Conn) Touch(key string, exptime int32, noreply bool) error {
 	c.ensureConnected()
 
 	option := ""
@@ -498,17 +498,17 @@ func (c *Client) Touch(key string, exptime int32, noreply bool) error {
 //// Statistics
 
 // Stats returns a map of stats.
-func (c *Client) Stats() (map[string]string, error) {
+func (c *Conn) Stats() (map[string]string, error) {
 	return c.stats([]byte("stats\r\n"))
 }
 
 // StatsArg returns a map of stats. Depending on <args>, various internal data is sent by
 // the server.
-func (c *Client) StatsArg(argument string) (map[string]string, error) {
+func (c *Conn) StatsArg(argument string) (map[string]string, error) {
 	return c.stats([]byte(fmt.Sprintf("stats %s\r\n", argument)))
 }
 
-func (c *Client) stats(command []byte) (map[string]string, error) {
+func (c *Conn) stats(command []byte) (map[string]string, error) {
 	c.ensureConnected()
 
 	// Send command: stats\r\n
@@ -537,7 +537,7 @@ func (c *Client) stats(command []byte) (map[string]string, error) {
 
 // FlushAll invalidates all existing items immediately (by default) or after the delay
 // specified. If delay is < 0, it ignores the delay.
-func (c *Client) FlushAll(delay int, noreply bool) error {
+func (c *Conn) FlushAll(delay int, noreply bool) error {
 	c.ensureConnected()
 
 	option := ""
@@ -563,7 +563,7 @@ func (c *Client) FlushAll(delay int, noreply bool) error {
 }
 
 // Version returns the version of memcached server
-func (c *Client) Version() (string, error) {
+func (c *Conn) Version() (string, error) {
 	c.ensureConnected()
 
 	// version\r\n
@@ -586,7 +586,7 @@ func (c *Client) Version() (string, error) {
 }
 
 // Quit closes the connection to memcached server
-func (c *Client) Quit() error {
+func (c *Conn) Quit() error {
 	c.ensureConnected()
 
 	// quit\r\n

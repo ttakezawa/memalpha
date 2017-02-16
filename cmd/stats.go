@@ -40,14 +40,14 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("stats called")
 
-		client := memalpha.NewClient("127.0.0.1:11211")
+		conn := memalpha.NewConn("127.0.0.1:11211")
 
 		var m map[string]string
 		var err error
 		if len(args) > 0 {
-			m, err = client.StatsArg(args[0])
+			m, err = conn.StatsArg(args[0])
 		} else {
-			m, err = client.Stats()
+			m, err = conn.Stats()
 		}
 
 		if err != nil {

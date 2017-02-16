@@ -42,13 +42,13 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("cas called")
 
-		client := memalpha.NewClient("127.0.0.1:11211")
+		conn := memalpha.NewConn("127.0.0.1:11211")
 		casid, err := strconv.ParseUint(args[2], 10, 64)
 		if err != nil {
 			fmt.Printf("err: %+v\n", err)
 			return
 		}
-		err = client.CompareAndSwap(args[0], []byte(args[1]), casid, 0, 0, false)
+		err = conn.CompareAndSwap(args[0], []byte(args[1]), casid, 0, 0, false)
 		fmt.Printf("err: %+v\n", err)
 	},
 }

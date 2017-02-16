@@ -26,8 +26,8 @@ func (e errorReader) Read(p []byte) (int, error) {
 	return 0, e.error
 }
 
-func newFakedClient(response string, requestWriter io.Writer) *Client {
-	return &Client{rw: bufio.NewReadWriter(
+func newFakedConn(response string, requestWriter io.Writer) *Conn {
+	return &Conn{rw: bufio.NewReadWriter(
 		bufio.NewReader(bytes.NewReader([]byte(response))),
 		bufio.NewWriter(requestWriter),
 	)}
@@ -35,7 +35,7 @@ func newFakedClient(response string, requestWriter io.Writer) *Client {
 
 func TestServerError(t *testing.T) {
 	errorMessage := "test fake"
-	c := newFakedClient("SERVER_ERROR "+errorMessage, ioutil.Discard)
+	c := newFakedConn("SERVER_ERROR "+errorMessage, ioutil.Discard)
 
 	err := c.Set("foo", []byte("bar"), 0, 0, false)
 	e, ok := err.(ServerError)
@@ -48,7 +48,7 @@ func TestServerError(t *testing.T) {
 
 func TestClientError(t *testing.T) {
 	errorMessage := "test fake"
-	c := newFakedClient("CLIENT_ERROR "+errorMessage, ioutil.Discard)
+	c := newFakedConn("CLIENT_ERROR "+errorMessage, ioutil.Discard)
 
 	err := c.Set("foo", []byte("bar"), 0, 0, false)
 	e, ok := err.(ClientError)
@@ -60,14 +60,14 @@ func TestClientError(t *testing.T) {
 }
 
 func TestReplyError(t *testing.T) {
-	c := newFakedClient("ERROR", ioutil.Discard)
+	c := newFakedConn("ERROR", ioutil.Discard)
 	err := c.Set("foo", []byte("bar"), 0, 0, false)
 	assert.Equal(t, ErrReplyError, err)
 }
 
 func TestMalformedGetResponse(t *testing.T) {
 	{
-		c := newFakedClient("foobar", ioutil.Discard)
+		c := newFakedConn("foobar", ioutil.Discard)
 		_, _, err := c.Get("foo")
 		got := err.Error()
 		expected := "malformed response"
@@ -80,7 +80,7 @@ func TestMalformedGetResponse(t *testing.T) {
 	{
 		// Network Error by read
 		expected := net.UnknownNetworkError("test")
-		c := &Client{rw: bufio.NewReadWriter(
+		c := &Conn{rw: bufio.NewReadWriter(
 			bufio.NewReader(errorReader{expected}),
 			bufio.NewWriter(ioutil.Discard),
 		)}
@@ -90,70 +90,70 @@ func TestMalformedGetResponse(t *testing.T) {
 
 	{
 		// Malformed CasID
-		c := newFakedClient("VALUE foo 0 6 foo\r\nfoobar\r\nEND", ioutil.Discard)
+		c := newFakedConn("VALUE foo 0 6 foo\r\nfoobar\r\nEND", ioutil.Discard)
 		_, _, err := c.Get("foo")
 		assert.IsType(t, &strconv.NumError{}, err)
 	}
 
 	{
 		// Malformed body
-		c := newFakedClient("VALUE foo 0 4\r\nfoobar\r\nEND", ioutil.Discard)
+		c := newFakedConn("VALUE foo 0 4\r\nfoobar\r\nEND", ioutil.Discard)
 		_, _, err := c.Get("foo")
 		assert.IsType(t, ProtocolError(""), err)
 	}
 
 	{
 		// Got malformed flags
-		c := newFakedClient("VALUE foo foo 4\r\nfoobar\r\nEND", ioutil.Discard)
+		c := newFakedConn("VALUE foo foo 4\r\nfoobar\r\nEND", ioutil.Discard)
 		_, _, err := c.Get("foo")
 		assert.IsType(t, &strconv.NumError{}, err)
 	}
 
 	{
 		// Got malformed value size
-		c := newFakedClient("VALUE foo 0 foo\r\nfoobar\r\nEND", ioutil.Discard)
+		c := newFakedConn("VALUE foo 0 foo\r\nfoobar\r\nEND", ioutil.Discard)
 		_, _, err := c.Get("foo")
 		assert.IsType(t, &strconv.NumError{}, err)
 	}
 
 	{
 		// Get response misses "END"
-		c := newFakedClient("VALUE foo 0 6\r\nfoobar\r\nNOT_END", ioutil.Discard)
+		c := newFakedConn("VALUE foo 0 6\r\nfoobar\r\nNOT_END", ioutil.Discard)
 		_, _, err := c.Get("foo")
 		assert.IsType(t, ProtocolError(""), err)
 	}
 
 	{
 		// Gets response missing "END"
-		c := newFakedClient("VALUE foo 0 6\r\nfoobar\r\nNOT_END", ioutil.Discard)
+		c := newFakedConn("VALUE foo 0 6\r\nfoobar\r\nNOT_END", ioutil.Discard)
 		_, err := c.Gets([]string{"foo"})
 		assert.IsType(t, ProtocolError(""), err)
 	}
 }
 
 func TestMalformedSetResponse(t *testing.T) {
-	c := newFakedClient("foobar", ioutil.Discard)
+	c := newFakedConn("foobar", ioutil.Discard)
 	err := c.Set("foo", []byte("bar"), 0, 0, false)
 	assert.IsType(t, ProtocolError(fmt.Sprintf("unknown reply type: %s", string("foobar"))), err)
 }
 
 func TestMalformedStatsResponse(t *testing.T) {
 	{
-		c := newFakedClient("foobar", ioutil.Discard)
+		c := newFakedConn("foobar", ioutil.Discard)
 		_, err := c.Stats()
 		assert.Equal(t, ProtocolError("malformed stats response"), err)
 	}
 
 	{
 		expected := net.UnknownNetworkError("test")
-		c := newFakedClient("foobar", errorWriter{expected})
+		c := newFakedConn("foobar", errorWriter{expected})
 		_, err := c.Stats()
 		assert.Equal(t, expected, err)
 	}
 }
 
 func TestIncrValueError(t *testing.T) {
-	c := newFakedClient("foobar", ioutil.Discard)
+	c := newFakedConn("foobar", ioutil.Discard)
 
 	err := c.Set("foo", []byte("42"), 0, 0, true)
 	_, err = c.Increment("foo", 1, false)
@@ -162,13 +162,13 @@ func TestIncrValueError(t *testing.T) {
 
 func TestMalformedVersionResponse(t *testing.T) {
 	{
-		c := newFakedClient("Malformed Ver 1", ioutil.Discard)
+		c := newFakedConn("Malformed Ver 1", ioutil.Discard)
 		_, err := c.Version()
 		assert.IsType(t, ProtocolError(""), err)
 	}
 
 	{
-		c := newFakedClient("ERROR", ioutil.Discard)
+		c := newFakedConn("ERROR", ioutil.Discard)
 		_, err := c.Version()
 		assert.Equal(t, ErrReplyError, err)
 	}

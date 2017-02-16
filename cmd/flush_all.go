@@ -48,8 +48,8 @@ to quickly create a Cobra application.`,
 			return
 		}
 
-		client := memalpha.NewClient("127.0.0.1:11211")
-		err = client.FlushAll(int(delay), false)
+		conn := memalpha.NewConn("127.0.0.1:11211")
+		err = conn.FlushAll(int(delay), false)
 		if err != nil {
 			fmt.Printf("err: %+v\n", err)
 			return

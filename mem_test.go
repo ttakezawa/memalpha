@@ -23,8 +23,8 @@ func freePort() (int, error) {
 }
 
 type server struct {
-	cmd    *exec.Cmd
-	client *Client
+	cmd  *exec.Cmd
+	conn *Conn
 }
 
 func newServer() *server {
@@ -42,12 +42,12 @@ func (s *server) Start() error {
 		return err
 	}
 
-	s.client = NewClient(fmt.Sprintf("localhost:%d", port))
+	s.conn = NewConn(fmt.Sprintf("localhost:%d", port))
 
 	// Wait a bit for the socket to appear.
 	for i := 0; i < 10; i++ {
-		s.client.ensureConnected()
-		err = s.client.Err()
+		s.conn.ensureConnected()
+		err = s.conn.Err()
 		if err == nil {
 			return nil
 		}
@@ -71,7 +71,7 @@ func TestLocalhost(t *testing.T) {
 	}
 	defer func() { _ = memd.Shutdown() }()
 
-	c := memd.client
+	c := memd.conn
 
 	mustSet := func(key string, value []byte) {
 		err := c.Set(key, value, 0, 0, true)
