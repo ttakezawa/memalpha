@@ -103,6 +103,20 @@ func TestMalformedGetResponse(t *testing.T) {
 	}
 
 	{
+		// Got malformed flags
+		c := newFakedClient("VALUE foo foo 4\r\nfoobar\r\nEND", ioutil.Discard)
+		_, _, err := c.Get("foo")
+		assert.IsType(t, &strconv.NumError{}, err)
+	}
+
+	{
+		// Got malformed value size
+		c := newFakedClient("VALUE foo 0 foo\r\nfoobar\r\nEND", ioutil.Discard)
+		_, _, err := c.Get("foo")
+		assert.IsType(t, &strconv.NumError{}, err)
+	}
+
+	{
 		// Get response misses "END"
 		c := newFakedClient("VALUE foo 0 6\r\nfoobar\r\nNOT_END", ioutil.Discard)
 		_, _, err := c.Get("foo")
