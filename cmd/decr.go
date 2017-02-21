@@ -41,7 +41,11 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("decr called")
 
-		conn := memalpha.NewConn("127.0.0.1:11211")
+		conn, err := memalpha.Dial("127.0.0.1:11211")
+		if err != nil {
+			fmt.Printf("err: %+v\n", err)
+			return
+		}
 		num, err := strconv.ParseUint(args[1], 10, 64)
 		if err != nil {
 			fmt.Printf("%+v\n", err) // output for debug

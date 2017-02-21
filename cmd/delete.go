@@ -40,8 +40,12 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("delete called")
 
-		conn := memalpha.NewConn("127.0.0.1:11211")
-		err := conn.Delete(args[0], false)
+		conn, err := memalpha.Dial("127.0.0.1:11211")
+		if err != nil {
+			fmt.Printf("err: %+v\n", err)
+			return
+		}
+		err = conn.Delete(args[0], false)
 		if err != nil {
 			fmt.Printf("err: %+v\n", err)
 		}

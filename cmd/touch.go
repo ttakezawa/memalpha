@@ -48,7 +48,11 @@ to quickly create a Cobra application.`,
 			return
 		}
 
-		conn := memalpha.NewConn("127.0.0.1:11211")
+		conn, err := memalpha.Dial("127.0.0.1:11211")
+		if err != nil {
+			fmt.Printf("err: %+v\n", err)
+			return
+		}
 		err = conn.Touch(args[0], int32(exptime), false)
 		if err != nil {
 			fmt.Printf("err: %+v\n", err)

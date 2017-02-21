@@ -91,10 +91,19 @@ type Response struct {
 	CasID uint64
 }
 
-// NewConn returns a new Conn.
-func NewConn(addr string) *Conn {
-	conn := &Conn{Addr: addr}
-	return conn
+// Dial connects to the memcached server.
+func Dial(addr string) (*Conn, error) {
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	c := &Conn{
+		Addr:    addr,
+		netConn: conn,
+		rw:      bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn)),
+	}
+	return c, nil
 }
 
 // Close a connection.
@@ -107,25 +116,6 @@ func (c *Conn) Close() error {
 	c.rw = nil
 	c.netConn = nil
 	return err
-}
-
-func (c *Conn) ensureConnected() {
-	if c.err != nil {
-		return
-	}
-
-	if c.rw != nil {
-		return
-	}
-
-	conn, err := net.Dial("tcp", c.Addr)
-	if err != nil {
-		c.err = err
-		return
-	}
-
-	c.netConn = conn
-	c.rw = bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 }
 
 func (c *Conn) readLine() []byte {
@@ -207,8 +197,6 @@ func (c *Conn) receiveCheckReply() {
 //// Retrieval commands
 
 func (c *Conn) sendRetrieveCommand(cmd string, key string) {
-	c.ensureConnected()
-
 	c.write([]byte(fmt.Sprintf("%s %s\r\n", cmd, key)))
 	c.flush()
 }
@@ -331,8 +319,6 @@ func (c *Conn) Gets(keys []string) (map[string]*Response, error) {
 //// Storage commands
 
 func (c *Conn) sendStorageCommand(command string, key string, value []byte, flags uint32, exptime int, casid uint64, noreply bool) error {
-	c.ensureConnected()
-
 	option := ""
 	if noreply {
 		option = "noreply"
@@ -397,8 +383,6 @@ func (c *Conn) CompareAndSwap(key string, value []byte, casid uint64, flags uint
 
 // Delete deletes the item with the provided key
 func (c *Conn) Delete(key string, noreply bool) error {
-	c.ensureConnected()
-
 	option := ""
 	if noreply {
 		option = optionNoreply
@@ -436,8 +420,6 @@ func (c *Conn) Decrement(key string, value uint64, noreply bool) (uint64, error)
 }
 
 func (c *Conn) executeIncrDecrCommand(command string, key string, value uint64, noreply bool) (uint64, error) {
-	c.ensureConnected()
-
 	option := ""
 	if noreply {
 		option = optionNoreply
@@ -470,8 +452,6 @@ func (c *Conn) executeIncrDecrCommand(command string, key string, value uint64, 
 
 // Touch is used to update the expiration time of an existing item without fetching it.
 func (c *Conn) Touch(key string, exptime int32, noreply bool) error {
-	c.ensureConnected()
-
 	option := ""
 	if noreply {
 		option = "noreply"
@@ -509,8 +489,6 @@ func (c *Conn) StatsArg(argument string) (map[string]string, error) {
 }
 
 func (c *Conn) stats(command []byte) (map[string]string, error) {
-	c.ensureConnected()
-
 	// Send command: stats\r\n
 	c.write(command)
 	c.flush()
@@ -538,8 +516,6 @@ func (c *Conn) stats(command []byte) (map[string]string, error) {
 // FlushAll invalidates all existing items immediately (by default) or after the delay
 // specified. If delay is < 0, it ignores the delay.
 func (c *Conn) FlushAll(delay int, noreply bool) error {
-	c.ensureConnected()
-
 	option := ""
 	if noreply {
 		option = optionNoreply
@@ -564,8 +540,6 @@ func (c *Conn) FlushAll(delay int, noreply bool) error {
 
 // Version returns the version of memcached server
 func (c *Conn) Version() (string, error) {
-	c.ensureConnected()
-
 	// version\r\n
 	// NOTE: noreply option is not allowed.
 	c.write([]byte("version\r\n"))
@@ -587,8 +561,6 @@ func (c *Conn) Version() (string, error) {
 
 // Quit closes the connection to memcached server
 func (c *Conn) Quit() error {
-	c.ensureConnected()
-
 	// quit\r\n
 	// NOTE: noreply option is not allowed.
 	c.write([]byte("quit\r\n"))

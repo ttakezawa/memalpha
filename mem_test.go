@@ -42,12 +42,9 @@ func (s *server) Start() error {
 		return err
 	}
 
-	s.conn = NewConn(fmt.Sprintf("localhost:%d", port))
-
 	// Wait a bit for the socket to appear.
 	for i := 0; i < 10; i++ {
-		s.conn.ensureConnected()
-		err = s.conn.Err()
+		s.conn, err = Dial(fmt.Sprintf("localhost:%d", port))
 		if err == nil {
 			return nil
 		}
