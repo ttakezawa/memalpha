@@ -2,6 +2,7 @@ package memalpha
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"os/exec"
@@ -59,10 +60,27 @@ func (s *server) Shutdown() error {
 	return s.cmd.Wait()
 }
 
+func TestDialContext(t *testing.T) {
+	memd := newServer()
+	err := memd.Start()
+	if err != nil {
+		t.Skipf("skipping test; couldn't start memcached: %s", err)
+	}
+	defer func() { _ = memd.Shutdown() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	_, err = DialContext(ctx, memd.conn.Addr)
+	assert.NoError(t, err)
+
+	cancel()
+
+	_, err = DialContext(ctx, memd.conn.Addr)
+	assert.Error(t, err)
+}
+
 func TestLocalhost(t *testing.T) {
 	memd := newServer()
 	err := memd.Start()
-
 	if err != nil {
 		t.Skipf("skipping test; couldn't start memcached: %s", err)
 	}

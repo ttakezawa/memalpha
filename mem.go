@@ -3,6 +3,7 @@ package memalpha
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -93,7 +94,13 @@ type Response struct {
 
 // Dial connects to the memcached server.
 func Dial(addr string) (*Conn, error) {
-	conn, err := net.Dial("tcp", addr)
+	return DialContext(context.Background(), addr)
+}
+
+// Dial connects to the memcached server using the provided context.
+func DialContext(ctx context.Context, addr string) (*Conn, error) {
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, err
 	}
