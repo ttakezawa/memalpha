@@ -25,7 +25,7 @@ func freePort() (int, error) {
 
 type server struct {
 	cmd  *exec.Cmd
-	conn *Conn
+	conn *TextConn
 }
 
 func newServer() *server {

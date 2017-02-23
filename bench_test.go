@@ -37,7 +37,7 @@ func benchmarkGetStub(b *testing.B, keySize int, valueSize int) {
 	value := bytes.Repeat([]byte("A"), valueSize)
 
 	response := fmt.Sprintf("VALUE %s 0 %d\r\n%s\r\nEND\r\n", key, len(value), string(value))
-	c := &Conn{
+	c := &TextConn{
 		rw: bufio.NewReadWriter(
 			bufio.NewReader(newRepeatReader([]byte(response))),
 			bufio.NewWriter(ioutil.Discard),

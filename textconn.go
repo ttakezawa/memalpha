@@ -4,54 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
 	"strconv"
 	"strings"
-)
-
-// ProtocolError describes a protocol violation.
-type ProtocolError string
-
-func (pe ProtocolError) Error() string {
-	return fmt.Sprintf("memcache: protocol error: %s", string(pe))
-}
-
-// ClientError means some sort of client error in the input line, i.e. the input doesn't
-// confirm to the protocol in some way.
-type ClientError string
-
-func (ce ClientError) Error() string {
-	return fmt.Sprintf("memcache: client error: %s", string(ce))
-}
-
-// ServerError means some sort of server error prevents the server from carrying out the
-// command.
-type ServerError string
-
-func (se ServerError) Error() string {
-	return fmt.Sprintf("memcache: server error: %s", string(se))
-}
-
-var (
-	// ErrCacheMiss means that a Get failed because the item wasn't present.
-	ErrCacheMiss = errors.New("memcache: cache miss")
-
-	// ErrNotFound indicates that the item wasn't present.
-	ErrNotFound = errors.New("memcache: item not found")
-
-	// ErrCasConflict indicates that the item you are trying to store with
-	// a "cas" command has been modified since you last fetched it.
-	ErrCasConflict = errors.New("memcache: compare-and-swap conflict")
-
-	// ErrNotStored normally means that the condition for an "add" or a
-	// "replace" command wasn't met.
-	ErrNotStored = errors.New("memcache: item not stored")
-
-	// ErrReplyError means the client sent a nonexistent command name.
-	ErrReplyError = errors.New("memcache: nonexistent command name")
 )
 
 var (
@@ -77,35 +34,28 @@ var (
 	optionNoreply = "noreply"
 )
 
-// Conn is a memcached connection
-type Conn struct {
+// TextConn is a memcached connection
+type TextConn struct {
 	Addr    string
 	netConn net.Conn
 	rw      *bufio.ReadWriter
 	err     error
 }
 
-// Response is a response of get
-type Response struct {
-	Value []byte
-	Flags uint32
-	CasID uint64
-}
-
 // Dial connects to the memcached server.
-func Dial(addr string) (*Conn, error) {
+func Dial(addr string) (*TextConn, error) {
 	return DialContext(context.Background(), addr)
 }
 
-// Dial connects to the memcached server using the provided context.
-func DialContext(ctx context.Context, addr string) (*Conn, error) {
+// DialContext connects to the memcached server using the provided context.
+func DialContext(ctx context.Context, addr string) (*TextConn, error) {
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 
-	c := &Conn{
+	c := &TextConn{
 		Addr:    addr,
 		netConn: conn,
 		rw:      bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn)),
@@ -114,7 +64,7 @@ func DialContext(ctx context.Context, addr string) (*Conn, error) {
 }
 
 // Close a connection.
-func (c *Conn) Close() error {
+func (c *TextConn) Close() error {
 	if c.netConn == nil {
 		return nil
 	}
@@ -125,7 +75,7 @@ func (c *Conn) Close() error {
 	return err
 }
 
-func (c *Conn) readLine() []byte {
+func (c *TextConn) readLine() []byte {
 	if c.err != nil {
 		return nil
 	}
@@ -140,14 +90,14 @@ func (c *Conn) readLine() []byte {
 	return line
 }
 
-func (c *Conn) write(p []byte) {
+func (c *TextConn) write(p []byte) {
 	if c.err != nil {
 		return
 	}
 	_, c.err = c.rw.Write(p)
 }
 
-func (c *Conn) flush() {
+func (c *TextConn) flush() {
 	if c.err != nil {
 		return
 	}
@@ -155,20 +105,20 @@ func (c *Conn) flush() {
 }
 
 // Err results in clearing c.err
-func (c *Conn) Err() error {
+func (c *TextConn) Err() error {
 	err := c.err
 	c.err = nil
 	return err
 }
 
-func (c *Conn) receiveReply() []byte {
+func (c *TextConn) receiveReply() []byte {
 	if c.err != nil {
 		return nil
 	}
 	return c.readLine()
 }
 
-func (c *Conn) checkReply(reply []byte) (ok bool) {
+func (c *TextConn) checkReply(reply []byte) (ok bool) {
 	if c.err != nil {
 		return false
 	}
@@ -192,7 +142,7 @@ func (c *Conn) checkReply(reply []byte) (ok bool) {
 	return false
 }
 
-func (c *Conn) receiveCheckReply() {
+func (c *TextConn) receiveCheckReply() {
 	reply := c.receiveReply()
 	ok := c.checkReply(reply)
 
@@ -203,13 +153,13 @@ func (c *Conn) receiveCheckReply() {
 
 //// Retrieval commands
 
-func (c *Conn) sendRetrieveCommand(cmd string, key string) {
+func (c *TextConn) sendRetrieveCommand(cmd string, key string) {
 	c.write([]byte(fmt.Sprintf("%s %s\r\n", cmd, key)))
 	c.flush()
 }
 
 // returns key, value, casId, flags, err
-func (c *Conn) receiveGetResponse() (string, *Response) {
+func (c *TextConn) receiveGetResponse() (string, *Response) {
 	header := c.readLine()
 	if c.err != nil {
 		return "", nil
@@ -236,7 +186,7 @@ func (c *Conn) receiveGetResponse() (string, *Response) {
 	return key, response
 }
 
-func (c *Conn) parseGetResponseHeader(header []byte, response *Response) (key string, size uint64, err error) {
+func (c *TextConn) parseGetResponseHeader(header []byte, response *Response) (key string, size uint64, err error) {
 	// VALUE <key> <flags> <bytes> [<cas unique>]\r\n
 	headerChunks := strings.Split(string(header), " ")
 	debugf("debug header: %+v\n", headerChunks) // output for debug
@@ -270,7 +220,7 @@ func (c *Conn) parseGetResponseHeader(header []byte, response *Response) (key st
 	return key, size, nil
 }
 
-func (c *Conn) receiveGetResponseBody(size uint64) ([]byte, error) {
+func (c *TextConn) receiveGetResponseBody(size uint64) ([]byte, error) {
 	buffer := make([]byte, size+2)
 	n, err := io.ReadFull(c.rw, buffer)
 	debugf("debug n: %+v\n", n) // output for debug
@@ -287,7 +237,7 @@ func (c *Conn) receiveGetResponseBody(size uint64) ([]byte, error) {
 }
 
 // Get returns a value, flags and error.
-func (c *Conn) Get(key string) (value []byte, flags uint32, err error) {
+func (c *TextConn) Get(key string) (value []byte, flags uint32, err error) {
 	c.sendRetrieveCommand("get", key)
 
 	_, response := c.receiveGetResponse()
@@ -305,7 +255,7 @@ func (c *Conn) Get(key string) (value []byte, flags uint32, err error) {
 }
 
 // Gets is an alternative get command for using with CAS.
-func (c *Conn) Gets(keys []string) (map[string]*Response, error) {
+func (c *TextConn) Gets(keys []string) (map[string]*Response, error) {
 	c.sendRetrieveCommand("gets", strings.Join(keys, " "))
 
 	m := make(map[string]*Response)
@@ -325,7 +275,7 @@ func (c *Conn) Gets(keys []string) (map[string]*Response, error) {
 
 //// Storage commands
 
-func (c *Conn) sendStorageCommand(command string, key string, value []byte, flags uint32, exptime int, casid uint64, noreply bool) error {
+func (c *TextConn) sendStorageCommand(command string, key string, value []byte, flags uint32, exptime int, casid uint64, noreply bool) error {
 	option := ""
 	if noreply {
 		option = "noreply"
@@ -352,44 +302,44 @@ func (c *Conn) sendStorageCommand(command string, key string, value []byte, flag
 }
 
 // Set means "store this data".
-func (c *Conn) Set(key string, value []byte, flags uint32, exptime int, noreply bool) error {
+func (c *TextConn) Set(key string, value []byte, flags uint32, exptime int, noreply bool) error {
 	return c.sendStorageCommand("set", key, value, flags, exptime, 0, noreply)
 }
 
 // Add means "store this data, but only if the server *doesn't* already hold data for this
 // key".
-func (c *Conn) Add(key string, value []byte, flags uint32, exptime int, noreply bool) error {
+func (c *TextConn) Add(key string, value []byte, flags uint32, exptime int, noreply bool) error {
 	return c.sendStorageCommand("add", key, value, flags, exptime, 0, noreply)
 }
 
 // Replace means "store this data, but only if the server *does* already hold data for
 // this key".
-func (c *Conn) Replace(key string, value []byte, flags uint32, exptime int, noreply bool) error {
+func (c *TextConn) Replace(key string, value []byte, flags uint32, exptime int, noreply bool) error {
 	return c.sendStorageCommand("replace", key, value, flags, exptime, 0, noreply)
 }
 
 // Append means "add this data to an existing key after existing data". It ignores flags
 // and exptime settings.
-func (c *Conn) Append(key string, value []byte, noreply bool) error {
+func (c *TextConn) Append(key string, value []byte, noreply bool) error {
 	return c.sendStorageCommand("append", key, value, 0, 0, 0, noreply)
 }
 
 // Prepend means "add this data to an existing key before existing data". It ignores flags
 // and exptime settings.
-func (c *Conn) Prepend(key string, value []byte, noreply bool) error {
+func (c *TextConn) Prepend(key string, value []byte, noreply bool) error {
 	return c.sendStorageCommand("prepend", key, value, 0, 0, 0, noreply)
 }
 
 // CompareAndSwap is a check and set operation which means "store this data but only if no
 // one else has updated since I last fetched it."
-func (c *Conn) CompareAndSwap(key string, value []byte, casid uint64, flags uint32, exptime int, noreply bool) error {
+func (c *TextConn) CompareAndSwap(key string, value []byte, casid uint64, flags uint32, exptime int, noreply bool) error {
 	return c.sendStorageCommand("cas", key, value, flags, exptime, casid, noreply)
 }
 
 //// Deletion
 
 // Delete deletes the item with the provided key
-func (c *Conn) Delete(key string, noreply bool) error {
+func (c *TextConn) Delete(key string, noreply bool) error {
 	option := ""
 	if noreply {
 		option = optionNoreply
@@ -413,7 +363,7 @@ func (c *Conn) Delete(key string, noreply bool) error {
 // the item. It is a decimal representation of a 64-bit unsigned integer. The return
 // value is the new value. If noreply is true, the return value is always 0.
 // Note that Overflow in the "incr" command will wrap around the 64 bit mark.
-func (c *Conn) Increment(key string, value uint64, noreply bool) (uint64, error) {
+func (c *TextConn) Increment(key string, value uint64, noreply bool) (uint64, error) {
 	return c.executeIncrDecrCommand("incr", key, value, noreply)
 }
 
@@ -422,11 +372,11 @@ func (c *Conn) Increment(key string, value uint64, noreply bool) (uint64, error)
 // value is the new value. If noreply is true, the return value is always 0.
 // Note that underflow in the "decr" command is caught: if a client tries to decrease
 // the value below 0, the new value will be 0.
-func (c *Conn) Decrement(key string, value uint64, noreply bool) (uint64, error) {
+func (c *TextConn) Decrement(key string, value uint64, noreply bool) (uint64, error) {
 	return c.executeIncrDecrCommand("decr", key, value, noreply)
 }
 
-func (c *Conn) executeIncrDecrCommand(command string, key string, value uint64, noreply bool) (uint64, error) {
+func (c *TextConn) executeIncrDecrCommand(command string, key string, value uint64, noreply bool) (uint64, error) {
 	option := ""
 	if noreply {
 		option = optionNoreply
@@ -458,7 +408,7 @@ func (c *Conn) executeIncrDecrCommand(command string, key string, value uint64, 
 //// Touch
 
 // Touch is used to update the expiration time of an existing item without fetching it.
-func (c *Conn) Touch(key string, exptime int32, noreply bool) error {
+func (c *TextConn) Touch(key string, exptime int32, noreply bool) error {
 	option := ""
 	if noreply {
 		option = "noreply"
@@ -485,17 +435,17 @@ func (c *Conn) Touch(key string, exptime int32, noreply bool) error {
 //// Statistics
 
 // Stats returns a map of stats.
-func (c *Conn) Stats() (map[string]string, error) {
+func (c *TextConn) Stats() (map[string]string, error) {
 	return c.stats([]byte("stats\r\n"))
 }
 
 // StatsArg returns a map of stats. Depending on <args>, various internal data is sent by
 // the server.
-func (c *Conn) StatsArg(argument string) (map[string]string, error) {
+func (c *TextConn) StatsArg(argument string) (map[string]string, error) {
 	return c.stats([]byte(fmt.Sprintf("stats %s\r\n", argument)))
 }
 
-func (c *Conn) stats(command []byte) (map[string]string, error) {
+func (c *TextConn) stats(command []byte) (map[string]string, error) {
 	// Send command: stats\r\n
 	c.write(command)
 	c.flush()
@@ -522,7 +472,7 @@ func (c *Conn) stats(command []byte) (map[string]string, error) {
 
 // FlushAll invalidates all existing items immediately (by default) or after the delay
 // specified. If delay is < 0, it ignores the delay.
-func (c *Conn) FlushAll(delay int, noreply bool) error {
+func (c *TextConn) FlushAll(delay int, noreply bool) error {
 	option := ""
 	if noreply {
 		option = optionNoreply
@@ -546,7 +496,7 @@ func (c *Conn) FlushAll(delay int, noreply bool) error {
 }
 
 // Version returns the version of memcached server
-func (c *Conn) Version() (string, error) {
+func (c *TextConn) Version() (string, error) {
 	// version\r\n
 	// NOTE: noreply option is not allowed.
 	c.write([]byte("version\r\n"))
@@ -567,7 +517,7 @@ func (c *Conn) Version() (string, error) {
 }
 
 // Quit closes the connection to memcached server
-func (c *Conn) Quit() error {
+func (c *TextConn) Quit() error {
 	// quit\r\n
 	// NOTE: noreply option is not allowed.
 	c.write([]byte("quit\r\n"))

@@ -26,8 +26,8 @@ func (e errorReader) Read(p []byte) (int, error) {
 	return 0, e.error
 }
 
-func newFakedConn(response string, requestWriter io.Writer) *Conn {
-	return &Conn{rw: bufio.NewReadWriter(
+func newFakedConn(response string, requestWriter io.Writer) *TextConn {
+	return &TextConn{rw: bufio.NewReadWriter(
 		bufio.NewReader(bytes.NewReader([]byte(response))),
 		bufio.NewWriter(requestWriter),
 	)}
@@ -80,7 +80,7 @@ func TestMalformedGetResponse(t *testing.T) {
 	{
 		// Network Error by read
 		expected := net.UnknownNetworkError("test")
-		c := &Conn{rw: bufio.NewReadWriter(
+		c := &TextConn{rw: bufio.NewReadWriter(
 			bufio.NewReader(errorReader{expected}),
 			bufio.NewWriter(ioutil.Discard),
 		)}
