@@ -1,4 +1,4 @@
-package memalpha
+package textproto
 
 import (
 	"bufio"
@@ -9,6 +9,8 @@ import (
 	"net"
 	"strconv"
 	"strings"
+
+	"github.com/ttakezawa/memalpha"
 )
 
 var (
@@ -33,6 +35,8 @@ var (
 	bytesVersion  = []byte("VERSION ")
 	optionNoreply = "noreply"
 )
+
+func debugf(format string, args ...interface{}) {}
 
 // TextConn is a memcached connection
 type TextConn struct {
@@ -127,17 +131,17 @@ func (c *TextConn) checkReply(reply []byte) (ok bool) {
 	case bytes.Equal(reply, replyStored), bytes.Equal(reply, replyDeleted), bytes.Equal(reply, replyTouched), bytes.Equal(reply, replyOk):
 		return true
 	case bytes.Equal(reply, replyExists):
-		c.err = ErrCasConflict
+		c.err = memalpha.ErrCasConflict
 	case bytes.Equal(reply, replyNotStored):
-		c.err = ErrNotStored
+		c.err = memalpha.ErrNotStored
 	case bytes.Equal(reply, replyNotFound):
-		c.err = ErrNotFound
+		c.err = memalpha.ErrNotFound
 	case bytes.Equal(reply, replyError):
-		c.err = ErrReplyError
+		c.err = memalpha.ErrReplyError
 	case bytes.HasPrefix(reply, replyClientErrorPrefix):
-		c.err = ClientError(reply[len(replyClientErrorPrefix):])
+		c.err = memalpha.ClientError(reply[len(replyClientErrorPrefix):])
 	case bytes.HasPrefix(reply, replyServerErrorPrefix):
-		c.err = ServerError(reply[len(replyServerErrorPrefix):])
+		c.err = memalpha.ServerError(reply[len(replyServerErrorPrefix):])
 	}
 	return false
 }
@@ -147,7 +151,7 @@ func (c *TextConn) receiveCheckReply() {
 	ok := c.checkReply(reply)
 
 	if c.err == nil && !ok {
-		c.err = ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
+		c.err = memalpha.ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
 	}
 }
 
@@ -159,17 +163,17 @@ func (c *TextConn) sendRetrieveCommand(cmd string, key string) {
 }
 
 // returns key, value, casId, flags, err
-func (c *TextConn) receiveGetResponse() (string, *Response) {
+func (c *TextConn) receiveGetResponse() (string, *memalpha.Response) {
 	header := c.readLine()
 	if c.err != nil {
 		return "", nil
 	}
 	if bytes.Equal(header, responseEnd) {
-		c.err = ErrCacheMiss
+		c.err = memalpha.ErrCacheMiss
 		return "", nil
 	}
 
-	response := &Response{}
+	response := &memalpha.Response{}
 	key, size, err := c.parseGetResponseHeader(header, response)
 	if err != nil {
 		c.err = err
@@ -186,12 +190,12 @@ func (c *TextConn) receiveGetResponse() (string, *Response) {
 	return key, response
 }
 
-func (c *TextConn) parseGetResponseHeader(header []byte, response *Response) (key string, size uint64, err error) {
+func (c *TextConn) parseGetResponseHeader(header []byte, response *memalpha.Response) (key string, size uint64, err error) {
 	// VALUE <key> <flags> <bytes> [<cas unique>]\r\n
 	headerChunks := strings.Split(string(header), " ")
 	debugf("debug header: %+v\n", headerChunks) // output for debug
 	if len(headerChunks) < 4 {
-		return "", 0, ProtocolError(fmt.Sprintf("malformed response: %#v", string(header)))
+		return "", 0, memalpha.ProtocolError(fmt.Sprintf("malformed response: %#v", string(header)))
 	}
 
 	key = headerChunks[1]
@@ -230,7 +234,7 @@ func (c *TextConn) receiveGetResponseBody(size uint64) ([]byte, error) {
 
 	// Check \r\n
 	if !bytes.HasSuffix(buffer, bytesCrlf) {
-		return nil, ProtocolError("malformed response: corrupt get result end")
+		return nil, memalpha.ProtocolError("malformed response: corrupt get result end")
 	}
 
 	return buffer, nil
@@ -248,21 +252,21 @@ func (c *TextConn) Get(key string) (value []byte, flags uint32, err error) {
 		return nil, 0, err
 	}
 	if !bytes.Equal(endLine, responseEnd) {
-		return nil, 0, ProtocolError("malformed response: corrupt get result end")
+		return nil, 0, memalpha.ProtocolError("malformed response: corrupt get result end")
 	}
 
 	return response.Value, response.Flags, nil
 }
 
 // Gets is an alternative get command for using with CAS.
-func (c *TextConn) Gets(keys []string) (map[string]*Response, error) {
+func (c *TextConn) Gets(keys []string) (map[string]*memalpha.Response, error) {
 	c.sendRetrieveCommand("gets", strings.Join(keys, " "))
 
-	m := make(map[string]*Response)
+	m := make(map[string]*memalpha.Response)
 	for {
 		key, response := c.receiveGetResponse()
 		if err := c.Err(); err != nil {
-			if err == ErrCacheMiss {
+			if err == memalpha.ErrCacheMiss {
 				break
 			}
 			return nil, err
@@ -460,7 +464,7 @@ func (c *TextConn) stats(command []byte) (map[string]string, error) {
 			return m, nil
 		}
 		if !bytes.HasPrefix(line, []byte("STAT ")) {
-			return nil, ProtocolError("malformed stats response")
+			return nil, memalpha.ProtocolError("malformed stats response")
 		}
 
 		data := bytes.SplitN(line[5:], []byte(" "), 3)
@@ -513,7 +517,7 @@ func (c *TextConn) Version() (string, error) {
 		// "VERSION " is 8 chars.
 		return string(reply[len(bytesVersion):]), nil
 	}
-	return "", ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
+	return "", memalpha.ProtocolError(fmt.Sprintf("unknown reply type: %s", string(reply)))
 }
 
 // Quit closes the connection to memcached server

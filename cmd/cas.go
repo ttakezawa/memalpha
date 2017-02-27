@@ -26,7 +26,7 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
-	"github.com/ttakezawa/memalpha"
+	"github.com/ttakezawa/memalpha/textproto"
 )
 
 // casCmd represents the cas command
@@ -42,7 +42,7 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("cas called")
 
-		conn, err := memalpha.Dial("127.0.0.1:11211")
+		conn, err := textproto.Dial("127.0.0.1:11211")
 		if err != nil {
 			fmt.Printf("err: %+v\n", err)
 			return

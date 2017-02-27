@@ -1,4 +1,4 @@
-package memalpha
+package memalpha_test
 
 import (
 	"testing"
@@ -6,10 +6,15 @@ import (
 	"context"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/ttakezawa/memalpha"
+	"github.com/ttakezawa/memalpha/internal/memdtest"
+	"github.com/ttakezawa/memalpha/textproto"
 )
 
 func TestPool(t *testing.T) {
-	memd := newServer()
+	memd := memdtest.NewServer(func(addr string) (memalpha.Conn, error) {
+		return textproto.Dial(addr)
+	})
 	err := memd.Start()
 	if err != nil {
 		t.Skipf("skipping test; couldn't start memcached: %s", err)
@@ -17,7 +22,12 @@ func TestPool(t *testing.T) {
 	defer func() { _ = memd.Shutdown() }()
 
 	// max idle connections = 1
-	pool := NewPool(memd.conn.Addr, 1)
+	pool := memalpha.NewPool(
+		func(ctx context.Context) (memalpha.Conn, error) {
+			return textproto.DialContext(ctx, memd.Addr)
+		},
+		1,
+	)
 
 	// create a connection
 	conn1, err := pool.Get()

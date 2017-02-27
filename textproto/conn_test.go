@@ -1,67 +1,22 @@
-package memalpha
+package textproto
 
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"net"
-	"os/exec"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/ttakezawa/memalpha"
+	"github.com/ttakezawa/memalpha/internal/memdtest"
 )
 
-func freePort() (int, error) {
-	l, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = l.Close() }()
-
-	return l.Addr().(*net.TCPAddr).Port, nil
-}
-
-type server struct {
-	cmd  *exec.Cmd
-	conn *TextConn
-}
-
-func newServer() *server {
-	return &server{}
-}
-
-func (s *server) Start() error {
-	port, err := freePort()
-	if err != nil {
-		return err
-	}
-
-	s.cmd = exec.Command("memcached", "-p", strconv.Itoa(port))
-	if err = s.cmd.Start(); err != nil {
-		return err
-	}
-
-	// Wait a bit for the socket to appear.
-	for i := 0; i < 10; i++ {
-		s.conn, err = Dial(fmt.Sprintf("localhost:%d", port))
-		if err == nil {
-			return nil
-		}
-		time.Sleep(time.Duration(25*i) * time.Millisecond)
-	}
-
-	return err
-}
-
-func (s *server) Shutdown() error {
-	_ = s.cmd.Process.Kill()
-	return s.cmd.Wait()
-}
-
 func TestDialContext(t *testing.T) {
-	memd := newServer()
+	memd := memdtest.NewServer(func(addr string) (memalpha.Conn, error) {
+		return Dial(addr)
+	})
 	err := memd.Start()
 	if err != nil {
 		t.Skipf("skipping test; couldn't start memcached: %s", err)
@@ -69,34 +24,36 @@ func TestDialContext(t *testing.T) {
 	defer func() { _ = memd.Shutdown() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	_, err = DialContext(ctx, memd.conn.Addr)
+	_, err = DialContext(ctx, memd.Addr)
 	assert.NoError(t, err)
 
 	cancel()
 
-	_, err = DialContext(ctx, memd.conn.Addr)
+	_, err = DialContext(ctx, memd.Addr)
 	assert.Error(t, err)
 }
 
 func TestLocalhost(t *testing.T) {
-	memd := newServer()
+	memd := memdtest.NewServer(func(addr string) (memalpha.Conn, error) {
+		return Dial(addr)
+	})
 	err := memd.Start()
 	if err != nil {
 		t.Skipf("skipping test; couldn't start memcached: %s", err)
 	}
 	defer func() { _ = memd.Shutdown() }()
 
-	c := memd.conn
+	c := memd.Conn
 
 	mustSet := func(key string, value []byte) {
-		err := c.Set(key, value, 0, 0, true)
-		assert.NoError(t, err, fmt.Sprintf("must Set(%q, %q)", key, value))
+		err1 := c.Set(key, value, 0, 0, true)
+		assert.NoError(t, err1, fmt.Sprintf("must Set(%q, %q)", key, value))
 	}
 
 	assertItem := func(key string, expected []byte) {
-		value, _, err := c.Get(key)
-		assert.Nil(t, err)
-		assert.NoError(t, err, fmt.Sprintf("must Get(%q)", key))
+		value, _, err1 := c.Get(key)
+		assert.Nil(t, err1)
+		assert.NoError(t, err1, fmt.Sprintf("must Get(%q)", key))
 		assert.Equal(t, string(expected), string(value))
 	}
 
@@ -141,7 +98,7 @@ func TestLocalhost(t *testing.T) {
 	assertItem("set_exptime", []byte("val"))
 	time.Sleep(time.Second)
 	_, _, err = c.Get("set_exptime")
-	assert.Equal(t, ErrCacheMiss, err, "get(set_exptime)")
+	assert.Equal(t, memalpha.ErrCacheMiss, err, "get(set_exptime)")
 
 	// Gets
 	mustSet("bar", []byte("barval"))
@@ -158,7 +115,7 @@ func TestLocalhost(t *testing.T) {
 	err = c.Add("baz", []byte("baz1"), 0, 0, false)
 	assert.NoError(t, err, "first add(baz)")
 	err = c.Add("baz", []byte("baz2"), 0, 0, false)
-	assert.Equal(t, ErrNotStored, err, "second add(baz)")
+	assert.Equal(t, memalpha.ErrNotStored, err, "second add(baz)")
 
 	// Add noreply
 	err = c.Add("add_norep", []byte("val"), 0, 0, true)
@@ -203,7 +160,7 @@ func TestLocalhost(t *testing.T) {
 	err = c.CompareAndSwap("foo", []byte("swapped"), m["foo"].CasID, 0, 0, false)
 	assert.NoError(t, err, "cas(foo, swapped, casid)")
 	err = c.CompareAndSwap("foo", []byte("swapped_failed"), m["foo"].CasID, 0, 0, false)
-	assert.Equal(t, ErrCasConflict, err, "cas(foo, swapped_faile, casid)")
+	assert.Equal(t, memalpha.ErrCasConflict, err, "cas(foo, swapped_faile, casid)")
 	assertItem("foo", []byte("swapped"))
 
 	// CompareAndSwap noreply
@@ -215,24 +172,24 @@ func TestLocalhost(t *testing.T) {
 
 	// CompareAndSwap raises ErrNotFound
 	err = c.CompareAndSwap("not_exists", []byte("ignored"), 42, 0, 0, false)
-	assert.Equal(t, ErrNotFound, err, "cas(not_exists)")
+	assert.Equal(t, memalpha.ErrNotFound, err, "cas(not_exists)")
 
 	// Delete
 	err = c.Delete("foo", false)
 	assert.NoError(t, err, "delete(foo)")
 	_, _, err = c.Get("foo")
-	assert.Equal(t, ErrCacheMiss, err, "get(foo)")
+	assert.Equal(t, memalpha.ErrCacheMiss, err, "get(foo)")
 
 	// Delete noreply
 	mustSet("foo", []byte("exist"))
 	err = c.Delete("foo", true)
 	assert.NoError(t, err, "delete(foo, noreply)")
 	_, _, err = c.Get("foo")
-	assert.Equal(t, ErrCacheMiss, err, "get(foo)")
+	assert.Equal(t, memalpha.ErrCacheMiss, err, "get(foo)")
 
 	// Delete raises ErrNotFound
 	err = c.Delete("not_exists", false)
-	assert.Equal(t, ErrNotFound, err, "delete(not_exists)")
+	assert.Equal(t, memalpha.ErrNotFound, err, "delete(not_exists)")
 
 	// Increment
 	mustSet("foo", []byte("35"))
@@ -247,7 +204,7 @@ func TestLocalhost(t *testing.T) {
 
 	// Increment raises ErrNotFound
 	_, err = c.Increment("not_exists", 10, false)
-	assert.Equal(t, ErrNotFound, err, "incr(not_exists, 10)")
+	assert.Equal(t, memalpha.ErrNotFound, err, "incr(not_exists, 10)")
 
 	// Decrement
 	num, err = c.Decrement("foo", 2, false)
@@ -261,7 +218,7 @@ func TestLocalhost(t *testing.T) {
 	assertItem("foo", []byte("42"))
 	time.Sleep(2 * time.Second)
 	_, _, err = c.Get("foo")
-	assert.Equal(t, ErrCacheMiss, err, "get(foo)")
+	assert.Equal(t, memalpha.ErrCacheMiss, err, "get(foo)")
 
 	// Touch noreply
 	mustSet("foo", []byte("val"))
@@ -270,7 +227,7 @@ func TestLocalhost(t *testing.T) {
 
 	// Touch raises ErrNotFound
 	err = c.Touch("not_exists", 10, false)
-	assert.Equal(t, ErrNotFound, err, "touch(not_exists)")
+	assert.Equal(t, memalpha.ErrNotFound, err, "touch(not_exists)")
 
 	// Stats
 	stats, err := c.Stats()
@@ -291,7 +248,7 @@ func TestLocalhost(t *testing.T) {
 	err = c.FlushAll(0, false)
 	assert.NoError(t, err, "flush_all(0)")
 	_, _, err = c.Get("foo")
-	assert.Equal(t, ErrCacheMiss, err, "get(foo)")
+	assert.Equal(t, memalpha.ErrCacheMiss, err, "get(foo)")
 
 	// FlushAll delayed
 	mustSet("foo", []byte("val"))
@@ -299,7 +256,7 @@ func TestLocalhost(t *testing.T) {
 	assert.NoError(t, err, "flush_all(1)")
 	time.Sleep(1 * time.Second)
 	_, _, err = c.Get("foo")
-	assert.Equal(t, ErrCacheMiss, err, "get(foo)")
+	assert.Equal(t, memalpha.ErrCacheMiss, err, "get(foo)")
 
 	// FlushAll non optional delayed
 	err = c.FlushAll(-1, false)

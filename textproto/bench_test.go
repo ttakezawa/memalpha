@@ -1,4 +1,4 @@
-package memalpha
+package textproto
 
 import (
 	"bufio"

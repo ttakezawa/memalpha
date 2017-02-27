@@ -1,4 +1,4 @@
-package memalpha
+package textproto
 
 import (
 	"bufio"
@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/ttakezawa/memalpha"
 )
 
 type errorWriter struct{ error }
@@ -38,7 +39,7 @@ func TestServerError(t *testing.T) {
 	c := newFakedConn("SERVER_ERROR "+errorMessage, ioutil.Discard)
 
 	err := c.Set("foo", []byte("bar"), 0, 0, false)
-	e, ok := err.(ServerError)
+	e, ok := err.(memalpha.ServerError)
 	if ok && strings.Contains(e.Error(), "server error: "+errorMessage) {
 		return
 	}
@@ -51,7 +52,7 @@ func TestClientError(t *testing.T) {
 	c := newFakedConn("CLIENT_ERROR "+errorMessage, ioutil.Discard)
 
 	err := c.Set("foo", []byte("bar"), 0, 0, false)
-	e, ok := err.(ClientError)
+	e, ok := err.(memalpha.ClientError)
 	if ok && strings.Contains(e.Error(), "client error: "+errorMessage) {
 		return
 	}
@@ -62,7 +63,7 @@ func TestClientError(t *testing.T) {
 func TestReplyError(t *testing.T) {
 	c := newFakedConn("ERROR", ioutil.Discard)
 	err := c.Set("foo", []byte("bar"), 0, 0, false)
-	assert.Equal(t, ErrReplyError, err)
+	assert.Equal(t, memalpha.ErrReplyError, err)
 }
 
 func TestMalformedGetResponse(t *testing.T) {
@@ -99,7 +100,7 @@ func TestMalformedGetResponse(t *testing.T) {
 		// Malformed body
 		c := newFakedConn("VALUE foo 0 4\r\nfoobar\r\nEND", ioutil.Discard)
 		_, _, err := c.Get("foo")
-		assert.IsType(t, ProtocolError(""), err)
+		assert.IsType(t, memalpha.ProtocolError(""), err)
 	}
 
 	{
@@ -120,28 +121,28 @@ func TestMalformedGetResponse(t *testing.T) {
 		// Get response misses "END"
 		c := newFakedConn("VALUE foo 0 6\r\nfoobar\r\nNOT_END", ioutil.Discard)
 		_, _, err := c.Get("foo")
-		assert.IsType(t, ProtocolError(""), err)
+		assert.IsType(t, memalpha.ProtocolError(""), err)
 	}
 
 	{
 		// Gets response missing "END"
 		c := newFakedConn("VALUE foo 0 6\r\nfoobar\r\nNOT_END", ioutil.Discard)
 		_, err := c.Gets([]string{"foo"})
-		assert.IsType(t, ProtocolError(""), err)
+		assert.IsType(t, memalpha.ProtocolError(""), err)
 	}
 }
 
 func TestMalformedSetResponse(t *testing.T) {
 	c := newFakedConn("foobar", ioutil.Discard)
 	err := c.Set("foo", []byte("bar"), 0, 0, false)
-	assert.IsType(t, ProtocolError(fmt.Sprintf("unknown reply type: %s", string("foobar"))), err)
+	assert.IsType(t, memalpha.ProtocolError(fmt.Sprintf("unknown reply type: %s", string("foobar"))), err)
 }
 
 func TestMalformedStatsResponse(t *testing.T) {
 	{
 		c := newFakedConn("foobar", ioutil.Discard)
 		_, err := c.Stats()
-		assert.Equal(t, ProtocolError("malformed stats response"), err)
+		assert.Equal(t, memalpha.ProtocolError("malformed stats response"), err)
 	}
 
 	{
@@ -164,12 +165,12 @@ func TestMalformedVersionResponse(t *testing.T) {
 	{
 		c := newFakedConn("Malformed Ver 1", ioutil.Discard)
 		_, err := c.Version()
-		assert.IsType(t, ProtocolError(""), err)
+		assert.IsType(t, memalpha.ProtocolError(""), err)
 	}
 
 	{
 		c := newFakedConn("ERROR", ioutil.Discard)
 		_, err := c.Version()
-		assert.Equal(t, ErrReplyError, err)
+		assert.Equal(t, memalpha.ErrReplyError, err)
 	}
 }

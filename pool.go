@@ -1,20 +1,18 @@
 package memalpha
 
-import (
-	"context"
-)
+import "context"
 
 // Pool maintains a pool of connections.
 type Pool struct {
-	Addr      string
-	idleConns chan Conn
+	DialContext func(context.Context) (Conn, error)
+	idleConns   chan Conn
 }
 
 // NewPool creates a new pool.
-func NewPool(addr string, maxIdleConns int) *Pool {
+func NewPool(dialContext func(context.Context) (Conn, error), maxIdleConns int) *Pool {
 	return &Pool{
-		Addr:      addr,
-		idleConns: make(chan Conn, maxIdleConns),
+		DialContext: dialContext,
+		idleConns:   make(chan Conn, maxIdleConns),
 	}
 }
 
@@ -32,7 +30,7 @@ func (p *Pool) GetContext(ctx context.Context) (Conn, error) {
 		return c, nil
 	default:
 	}
-	return DialContext(ctx, p.Addr)
+	return p.DialContext(ctx)
 }
 
 // Put puts a connection into a pool.
