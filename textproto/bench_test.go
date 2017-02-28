@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"testing"
+
+	"github.com/ttakezawa/memalpha"
+	"github.com/ttakezawa/memalpha/internal/memdtest"
 )
 
 func BenchmarkGetStubSmall(b *testing.B) { benchmarkGetStub(b, 5, 5) }
@@ -59,20 +62,22 @@ func benchmarkGet(b *testing.B, keySize int, valueSize int) {
 	key := string(bytes.Repeat([]byte("A"), keySize))
 	value := bytes.Repeat([]byte("A"), valueSize)
 
-	memd := newServer()
+	memd := memdtest.NewServer(func(addr string) (memalpha.Conn, error) {
+		return Dial(addr)
+	})
 	if err := memd.Start(); err != nil {
 		b.Skipf("skipping test; couldn't start memcached: %s", err)
 	}
 	defer memd.Shutdown()
 
-	if err := memd.conn.Set(key, value, 0, 0, false); err != nil {
+	if err := memd.Conn.Set(key, value, 0, 0, false); err != nil {
 		b.Skipf("skipping test; couldn't set(%s, %s) = %+v", key, value, err)
 	}
 
 	b.SetBytes(int64(keySize + valueSize))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, _, err := memd.conn.Get(key); err != nil {
+		if _, _, err := memd.Conn.Get(key); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -83,20 +88,22 @@ func benchmarkSet(b *testing.B, keySize int, valueSize int) {
 	key := string(bytes.Repeat([]byte("A"), keySize))
 	value := bytes.Repeat([]byte("A"), valueSize)
 
-	memd := newServer()
+	memd := memdtest.NewServer(func(addr string) (memalpha.Conn, error) {
+		return Dial(addr)
+	})
 	if err := memd.Start(); err != nil {
 		b.Skipf("skipping test; couldn't start memcached: %s", err)
 	}
 	defer memd.Shutdown()
 
-	if err := memd.conn.Set(key, value, 0, 0, false); err != nil {
+	if err := memd.Conn.Set(key, value, 0, 0, false); err != nil {
 		b.Skipf("skipping test; couldn't set(%s, %s) = %+v", key, value, err)
 	}
 
 	b.SetBytes(int64(keySize + valueSize))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := memd.conn.Set(key, value, 0, 0, false); err != nil {
+		if err := memd.Conn.Set(key, value, 0, 0, false); err != nil {
 			b.Fatal(err)
 		}
 	}

@@ -274,8 +274,12 @@ func TestLocalhost(t *testing.T) {
 	// Quit
 	err = c.Quit()
 	assert.NoError(t, err, "quit()")
-	if c.netConn == nil {
-		t.Fatalf("net.Conn = %q, want nil", c.netConn)
+	conn, ok := c.(*TextConn)
+	if !ok {
+		t.Fatalf("conn = %#v, want textproto.TextConn", c)
+	}
+	if conn.netConn == nil {
+		t.Fatalf("net.Conn = %q, want nil", conn.netConn)
 	}
 
 	// Close
