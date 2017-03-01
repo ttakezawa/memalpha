@@ -36,8 +36,6 @@ var (
 	optionNoreply = "noreply"
 )
 
-func debugf(format string, args ...interface{}) {}
-
 // TextConn is a memcached connection
 type TextConn struct {
 	Addr    string

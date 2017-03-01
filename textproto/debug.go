@@ -1,6 +1,6 @@
 // +build debug
 
-package memalpha
+package textproto
 
 import "log"
 

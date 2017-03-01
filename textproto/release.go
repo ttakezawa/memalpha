@@ -1,5 +1,5 @@
 // +build !debug
 
-package memalpha
+package textproto
 
 func debugf(format string, args ...interface{}) {}
