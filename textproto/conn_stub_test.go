@@ -141,14 +141,14 @@ func TestMalformedSetResponse(t *testing.T) {
 func TestMalformedStatsResponse(t *testing.T) {
 	{
 		c := newFakedConn("foobar", ioutil.Discard)
-		_, err := c.Stats()
+		_, err := c.Stats("")
 		assert.Equal(t, memalpha.ProtocolError("malformed stats response"), err)
 	}
 
 	{
 		expected := net.UnknownNetworkError("test")
 		c := newFakedConn("foobar", errorWriter{expected})
-		_, err := c.Stats()
+		_, err := c.Stats("")
 		assert.Equal(t, expected, err)
 	}
 }

@@ -436,19 +436,12 @@ func (c *TextConn) Touch(key string, exptime int32, noreply bool) error {
 
 //// Statistics
 
-// Stats returns a map of stats.
-func (c *TextConn) Stats() (map[string]string, error) {
-	return c.stats([]byte("stats\r\n"))
-}
-
-// StatsArg returns a map of stats. Depending on <args>, various internal data is sent by
-// the server.
-func (c *TextConn) StatsArg(argument string) (map[string]string, error) {
-	return c.stats([]byte(fmt.Sprintf("stats %s\r\n", argument)))
-}
-
-func (c *TextConn) stats(command []byte) (map[string]string, error) {
+// Stats returns a map of stats. Depending on key, various internal data is sent by the
+// server. When the key is an empty string, the server will respond with a "default" set
+// of statistics information.
+func (c *TextConn) Stats(statsKey string) (map[string]string, error) {
 	// Send command: stats\r\n
+	command := []byte(fmt.Sprintf("stats %s\r\n", statsKey))
 	c.write(command)
 	c.flush()
 

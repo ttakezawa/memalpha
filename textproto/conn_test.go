@@ -230,17 +230,17 @@ func TestLocalhost(t *testing.T) {
 	assert.Equal(t, memalpha.ErrNotFound, err, "touch(not_exists)")
 
 	// Stats
-	stats, err := c.Stats()
+	stats, err := c.Stats("")
 	assert.NoError(t, err, "stats()")
 	if len(stats) < 2 {
 		t.Fatalf("stats(): len(Value) = %q, want len(value) > 2", stats)
 	}
 
-	// StatsArg
-	stats, err = c.StatsArg("slabs")
+	// Stats with statskey
+	stats, err = c.Stats("slabs")
 	assert.NoError(t, err, "stats(slabs)")
 	if len(stats) < 2 {
-		t.Fatalf("stats(): len(Value) = %q, want len(value) > 2", stats)
+		t.Fatalf("stats(slabs): len(Value) = %q, want len(value) > 2", stats)
 	}
 
 	// FlushAll

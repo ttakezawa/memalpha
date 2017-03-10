@@ -15,8 +15,7 @@ type Conn interface {
 	Increment(key string, value uint64, noreply bool) (uint64, error)
 	Decrement(key string, value uint64, noreply bool) (uint64, error)
 	Touch(key string, exptime int32, noreply bool) error
-	Stats() (map[string]string, error)
-	StatsArg(argument string) (map[string]string, error)
+	Stats(statsKey string) (map[string]string, error)
 	FlushAll(delay int, noreply bool) error
 	Version() (string, error)
 	Quit() error

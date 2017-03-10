@@ -48,9 +48,9 @@ to quickly create a Cobra application.`,
 
 		var m map[string]string
 		if len(args) > 0 {
-			m, err = conn.StatsArg(args[0])
+			m, err = conn.Stats(args[0])
 		} else {
-			m, err = conn.Stats()
+			m, err = conn.Stats("")
 		}
 
 		if err != nil {
